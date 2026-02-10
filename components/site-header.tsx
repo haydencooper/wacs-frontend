@@ -71,7 +71,11 @@ function NavMenu({ showAdmin }: { showAdmin: boolean }) {
           <div className="px-3 py-2">
             <p className="text-xs font-medium text-muted-foreground">Navigate</p>
           </div>
-          <div className="py-1">
+          {/* Mobile-only: search inside menu */}
+          <div className="border-t border-border px-3 py-2 sm:hidden">
+            <PlayerSearch />
+          </div>
+          <div className="border-t border-border py-1">
             {allItems.map((item) => {
               const isActive =
                 pathname === item.href ||
@@ -117,7 +121,7 @@ function UserMenu() {
         className="flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
       >
         <LogIn className="h-3.5 w-3.5" />
-        <span>Sign in</span>
+        <span className="hidden sm:inline">Sign in</span>
       </button>
     )
   }
@@ -148,9 +152,6 @@ function UserMenu() {
         ) : (
           <User className="h-5 w-5" />
         )}
-        <span className="hidden text-sm font-medium sm:inline max-w-32 truncate">
-          {steam?.personaname ?? "Player"}
-        </span>
       </button>
 
       {open && (
@@ -216,7 +217,7 @@ export function SiteHeader() {
     <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 lg:px-8">
         {/* Left: Logo */}
-        <Link href="/" className="flex items-center gap-2">
+        <Link href="/" className="flex shrink-0 items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
             <Crosshair className="h-5 w-5 text-primary-foreground" />
           </div>
@@ -225,14 +226,9 @@ export function SiteHeader() {
           </span>
         </Link>
 
-        {/* Center: Search (hidden on small) */}
-        <div className="hidden flex-1 justify-center px-4 sm:flex">
-          <PlayerSearch />
-        </div>
-
-        {/* Right: Actions */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          <div className="sm:hidden">
+        {/* Right: Search + Actions */}
+        <div className="flex items-center gap-2">
+          <div className="hidden sm:block">
             <PlayerSearch />
           </div>
           <ThemeToggle />

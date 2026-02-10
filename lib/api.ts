@@ -77,6 +77,8 @@ export function mapG5Error(error: unknown): { message: string; status: number } 
 interface FetchOptions {
   method?: string
   body?: unknown
+  /** Send body as application/x-www-form-urlencoded instead of JSON. Required by some G5API POST endpoints. */
+  formEncoded?: boolean
   revalidate?: number
 }
 
@@ -84,7 +86,7 @@ export async function g5Fetch<T>(
   path: string,
   options: FetchOptions = {}
 ): Promise<T> {
-  const { method = "GET", body, revalidate } = options
+  const { method = "GET", body, formEncoded = false, revalidate } = options
 
   const baseUrl = getBaseUrl()
   const apiKey = getApiKey()
@@ -95,9 +97,13 @@ export async function g5Fetch<T>(
 
   const url = `${baseUrl}${path}`
 
+  const contentType = formEncoded
+    ? "application/x-www-form-urlencoded"
+    : "application/json"
+
   const headers: Record<string, string> = {
     "user-api": apiKey,
-    "Content-Type": "application/json",
+    "Content-Type": contentType,
   }
 
   const fetchOptions: RequestInit & { next?: { revalidate?: number } } = {
@@ -107,7 +113,17 @@ export async function g5Fetch<T>(
   }
 
   if (body) {
-    fetchOptions.body = JSON.stringify(body)
+    if (formEncoded && typeof body === "object" && body !== null) {
+      const params = new URLSearchParams()
+      for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
+        if (value !== undefined && value !== null) {
+          params.append(key, String(value))
+        }
+      }
+      fetchOptions.body = params.toString()
+    } else {
+      fetchOptions.body = JSON.stringify(body)
+    }
   }
 
   if (revalidate !== undefined) {

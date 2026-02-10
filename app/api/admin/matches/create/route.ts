@@ -38,10 +38,13 @@ export async function POST(request: Request) {
       payload.players_per_team = Number(body.players_per_team)
     }
 
+    console.log("[v0] Match creation payload:", JSON.stringify(payload))
     const data = await g5Fetch<unknown>("/api/matches", {
       method: "POST",
       body: payload,
+      formEncoded: true,
     })
+    console.log("[v0] Match creation response:", JSON.stringify(data))
     return NextResponse.json(data)
   } catch (error) {
     console.error("Admin create match error:", error)
