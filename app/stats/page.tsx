@@ -38,11 +38,11 @@ export default async function StatsPage() {
     (m) => (m.winner !== null || m.end_time !== null) && !m.cancelled && !m.forfeit
   )
 
-  // Fetch actual map stats from completed matches (up to 50 most recent) for map name data
+  // Fetch actual map stats from ALL completed matches for accurate map data
   const [mapStatsAll, avatars] = await Promise.all([
     fetchBulkMapStats(
       [...completedMatches].sort((a, b) => b.id - a.id),
-      50
+      completedMatches.length // fetch all, not just 50
     ),
     fetchSteamAvatars(leaderboard.slice(0, 5).map((p) => p.steamId)),
   ])
@@ -71,16 +71,13 @@ export default async function StatsPage() {
         ).toFixed(2)
       : "0.00"
 
-  // Total rounds: compute from match scores (more reliable than leaderboard roundsplayed)
-  // Each match score pair represents total rounds played in that match
-  const totalRoundsFromMatches = completedMatches.reduce((s, m) => {
-    const s1 = m.team1_mapscore ?? m.team1_score
-    const s2 = m.team2_mapscore ?? m.team2_score
-    return s + s1 + s2
-  }, 0)
-  // Also check leaderboard roundsplayed as fallback
+  // Total rounds: compute from actual map stats (most reliable source)
+  // Each MapStat has team1_score + team2_score = total rounds for that map
+  const totalRoundsFromMapStats = mapStatsAll.reduce((s, ms) => s + ms.team1_score + ms.team2_score, 0)
+  // Fallback: leaderboard roundsplayed (sums across all players, so divide by ~10 for avg team size)
   const totalRoundsFromLeaderboard = leaderboard.reduce((s, p) => s + p.roundsplayed, 0)
-  const totalRounds = Math.max(totalRoundsFromMatches, totalRoundsFromLeaderboard)
+  // Use map stats as primary (actual per-map round data), leaderboard as fallback
+  const totalRounds = totalRoundsFromMapStats > 0 ? totalRoundsFromMapStats : totalRoundsFromLeaderboard
 
   // Map popularity: use actual map_name from map stats data (not match.title)
   const mapCounts: Record<string, number> = {}
@@ -125,17 +122,16 @@ export default async function StatsPage() {
     .sort((a, b) => b.k5 - a.k5)
     .slice(0, 5)
 
-  // Average rounds per match
-  const matchScores = completedMatches
-    .map((m) => {
-      const s1 = m.team1_mapscore ?? m.team1_score
-      const s2 = m.team2_mapscore ?? m.team2_score
-      return s1 + s2
-    })
-    .filter((s) => s > 0)
+  // Average rounds per match: group map stats by match_id and sum rounds per match
+  const roundsByMatch = new Map<number, number>()
+  for (const ms of mapStatsAll) {
+    const prev = roundsByMatch.get(ms.match_id) ?? 0
+    roundsByMatch.set(ms.match_id, prev + ms.team1_score + ms.team2_score)
+  }
+  const matchRoundTotals = [...roundsByMatch.values()].filter((v) => v > 0)
   const avgTotalRoundsPerMatch =
-    matchScores.length > 0
-      ? (matchScores.reduce((s, v) => s + v, 0) / matchScores.length).toFixed(1)
+    matchRoundTotals.length > 0
+      ? (matchRoundTotals.reduce((s, v) => s + v, 0) / matchRoundTotals.length).toFixed(1)
       : "0"
 
   return (
@@ -160,7 +156,7 @@ export default async function StatsPage() {
       {/* Overview Cards */}
       <section className="mb-10 grid grid-cols-2 gap-4 lg:grid-cols-4 animate-fade-in-up stagger-1">
         <StatCard label="Players" value={totalPlayers} icon={Users} />
-        <StatCard label="Matches Played" value={completedMatches.length} icon={Swords} />
+        <StatCard label="Matches Played" value={completedMatches.length} icon={Swords} trend={`${mapStatsAll.length} maps`} />
         <StatCard label="Total Rounds" value={totalRounds > 0 ? totalRounds.toLocaleString() : "N/A"} icon={Target} />
         <StatCard label="Avg Rating" value={avgRating} icon={Zap} />
       </section>

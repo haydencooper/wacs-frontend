@@ -274,13 +274,23 @@ function normalizeMatch(raw: Record<string, unknown>): Match {
   // G5API stores winner as team_id. Normalize to 1 (team1) or 2 (team2).
   let winner: number | null = null
   if (rawWinner !== null && rawWinner !== 0) {
-    if (rawWinner === team1Id) {
+    if (rawWinner === team1Id && team1Id !== 0) {
       winner = 1
-    } else if (rawWinner === team2Id) {
+    } else if (rawWinner === team2Id && team2Id !== 0) {
       winner = 2
-    } else {
-      // If winner doesn't match team IDs, it might already be 1/2
+    } else if (rawWinner === 1 || rawWinner === 2) {
+      // Already normalized
       winner = rawWinner
+    } else {
+      // PUG match: rawWinner is a team_id we can't map. 
+      // Derive winner from mapscore/score as fallback.
+      const team1MapScore = raw.team1_mapscore != null ? Number(raw.team1_mapscore) : null
+      const team2MapScore = raw.team2_mapscore != null ? Number(raw.team2_mapscore) : null
+      const s1 = team1MapScore ?? Number(raw.team1_score ?? 0)
+      const s2 = team2MapScore ?? Number(raw.team2_score ?? 0)
+      if (s1 > s2) winner = 1
+      else if (s2 > s1) winner = 2
+      // If scores are equal, we can't determine the winner
     }
   }
 
@@ -637,18 +647,40 @@ export async function fetchPlayerTeamInMatches(
           { revalidate: 120 }
         )
         const stats = unwrapArray(data, "playerstats", "playerStats")
+        
+        // Collect all team IDs from player stats for this match
+        const teamIds = new Set<number>()
+        for (const s of stats) {
+          const tid = Number(s.team_id ?? 0)
+          if (tid > 0) teamIds.add(tid)
+        }
+        
+        // Build team_id -> team number mapping
+        let teamIdToNumber: Map<number, number>
+        if (match.team1_id > 0 && match.team2_id > 0) {
+          teamIdToNumber = new Map([
+            [match.team1_id, 1],
+            [match.team2_id, 2],
+          ])
+        } else if (teamIds.size === 2) {
+          // PUG match: infer teams from player stats
+          const sorted = [...teamIds].sort((a, b) => a - b)
+          teamIdToNumber = new Map([
+            [sorted[0], 1],
+            [sorted[1], 2],
+          ])
+        } else {
+          result.set(match.id, null)
+          return
+        }
+        
         const playerRow = stats.find(
           (s) => String(s.steam_id ?? s.steamId ?? "") === steamId
         )
         if (playerRow) {
           const teamId = Number(playerRow.team_id ?? 0)
-          if (teamId === match.team1_id) {
-            result.set(match.id, 1)
-          } else if (teamId === match.team2_id) {
-            result.set(match.id, 2)
-          } else {
-            result.set(match.id, null)
-          }
+          const teamNum = teamIdToNumber.get(teamId)
+          result.set(match.id, teamNum ?? null)
         } else {
           result.set(match.id, null)
         }
@@ -662,18 +694,27 @@ export async function fetchPlayerTeamInMatches(
 }
 
 /**
- * Fetch map stats for multiple matches in parallel. Returns a flat array of all MapStat entries.
+ * Fetch map stats for multiple matches in batched parallel. Returns a flat array of all MapStat entries.
  * Used by the community stats page to get map name data.
+ * Processes in batches of 15 to avoid overwhelming the API.
  */
 export async function fetchBulkMapStats(
   matches: Match[],
   limit = 50
 ): Promise<MapStat[]> {
   const batch = matches.slice(0, limit)
-  const results = await Promise.all(
-    batch.map((m) => fetchMapStats(String(m.id), m))
-  )
-  return results.flat()
+  const allResults: MapStat[] = []
+  const BATCH_SIZE = 15
+  
+  for (let i = 0; i < batch.length; i += BATCH_SIZE) {
+    const chunk = batch.slice(i, i + BATCH_SIZE)
+    const results = await Promise.all(
+      chunk.map((m) => fetchMapStats(String(m.id), m))
+    )
+    allResults.push(...results.flat())
+  }
+  
+  return allResults
 }
 
 export async function fetchSeasons(): Promise<Season[]> {

@@ -469,21 +469,23 @@ export function PlayerComparison({ players, avatars, matches = [], matchParticip
             let h2hCount = 0
 
             for (const m of matches) {
-              if (m.cancelled || m.winner === null) continue
+              if (m.cancelled) continue
               const participants = matchParticipants[m.id]
               if (!participants) continue
 
               const p1Team = participants[player1.steamId]
               const p2Team = participants[player2.steamId]
+              // __winner is a special key set by the server with the correct winning team number
+              const winningTeam = participants["__winner"]
 
-              // Both must be present and on different teams
-              if (!p1Team || !p2Team || p1Team === p2Team) continue
+              // Both must be present and on different teams, and we need a winner
+              if (!p1Team || !p2Team || p1Team === p2Team || !winningTeam) continue
 
               h2hCount++
               // Did player1's team win?
-              if (m.winner === p1Team) {
+              if (winningTeam === p1Team) {
                 p1Wins++
-              } else {
+              } else if (winningTeam === p2Team) {
                 p2Wins++
               }
             }

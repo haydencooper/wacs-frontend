@@ -195,7 +195,16 @@ export default async function MatchDetailPage({
               <Swords className="h-3.5 w-3.5" />
               <span>{getDuration(match.start_time, match.end_time)}</span>
             </div>
-            {match.title && (
+            {/* Show actual map names from map stats instead of generic "Map X of Y" title */}
+            {maps.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <MapPin className="h-3.5 w-3.5" />
+                <span>
+                  {maps.map((m) => getMapDisplayName(m.map_name) || m.map_name).join(", ")}
+                </span>
+              </div>
+            )}
+            {maps.length === 0 && match.title && !match.title.match(/^Map \d+ of \d+$/) && (
               <div className="flex items-center gap-1.5">
                 <MapPin className="h-3.5 w-3.5" />
                 <span>{match.title}</span>
