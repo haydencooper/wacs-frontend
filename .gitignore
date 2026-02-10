@@ -1,0 +1,21 @@
+
+# Python
+*.pyc
+bot.log
+config.json
+
+# Node / Next.js
+node_modules
+.pnpm-store
+.next
+out
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+.env
+.env.local
+.env.*.local
+.env.example
+.claude
+.vscode
+vercel.json
