@@ -20,11 +20,11 @@ export function SteamAuthButton() {
       | undefined
 
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 sm:gap-2">
         {steam?.steamid && (
           <Link
             href={`/player/${steam.steamid}`}
-            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            className="flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground sm:gap-2 sm:px-2"
           >
             {steam.avatarmedium ? (
               <img
@@ -35,16 +35,16 @@ export function SteamAuthButton() {
             ) : (
               <User className="h-4 w-4" />
             )}
-            <span className="hidden sm:inline">{steam.personaname ?? "Player"}</span>
+            <span className="hidden md:inline max-w-24 truncate lg:max-w-none">{steam.personaname ?? "Player"}</span>
           </Link>
         )}
         <button
           onClick={() => signOut()}
-          className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground sm:px-2.5"
           aria-label="Sign out"
         >
           <LogOut className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">Sign out</span>
+          <span className="hidden lg:inline">Sign out</span>
         </button>
       </div>
     )

@@ -31,6 +31,13 @@ export async function POST(request: Request) {
       is_pug: true,
     }
 
+    if (body.veto_mappool) {
+      payload.veto_mappool = body.veto_mappool
+    }
+    if (body.players_per_team) {
+      payload.players_per_team = Number(body.players_per_team)
+    }
+
     const data = await g5Fetch<unknown>("/api/matches", {
       method: "POST",
       body: payload,

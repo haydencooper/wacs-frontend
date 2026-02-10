@@ -164,7 +164,7 @@ export function PlayerSearch() {
                       <span className="font-medium text-foreground">{player.name}</span>
                     </div>
                     <div className="flex items-center gap-3 text-xs">
-                      <span className="flex items-center gap-1 text-amber-500">
+                      <span className="flex items-center gap-1 text-live">
                         <Trophy className="h-3 w-3" />
                         {player.points}
                       </span>

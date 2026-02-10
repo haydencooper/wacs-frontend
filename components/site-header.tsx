@@ -47,7 +47,7 @@ export function SiteHeader() {
           </span>
         </Link>
 
-        <nav className="hidden items-center gap-1 md:flex">
+        <nav className="hidden items-center gap-1 lg:flex">
           {navItems.map((item) => {
             const isActive =
               pathname === item.href ||
@@ -84,15 +84,15 @@ export function SiteHeader() {
           )}
         </nav>
 
-        <div className="flex items-center gap-2">
-          <div className="hidden sm:block">
+        <div className="flex items-center gap-3">
+          <div className="hidden md:block">
             <PlayerSearch />
           </div>
           <SteamAuthButton />
           <ThemeToggle />
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="rounded-md p-2 text-muted-foreground hover:bg-secondary md:hidden"
+            className="rounded-md p-2 text-muted-foreground hover:bg-secondary lg:hidden"
             aria-label="Toggle menu"
           >
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -101,8 +101,8 @@ export function SiteHeader() {
       </div>
 
       {mobileOpen && (
-        <nav className="border-t border-border bg-background px-4 py-2 md:hidden">
-          <div className="mb-2 sm:hidden">
+        <nav className="border-t border-border bg-background px-4 py-2 lg:hidden">
+          <div className="mb-2 md:hidden">
             <PlayerSearch />
           </div>
           {navItems.map((item) => {
