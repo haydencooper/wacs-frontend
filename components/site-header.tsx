@@ -13,6 +13,7 @@ import {
   LogOut,
   User,
   LogIn,
+  X,
 } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
 import { useSession, signIn, signOut } from "next-auth/react"
@@ -40,70 +41,6 @@ function useClickOutside(ref: React.RefObject<HTMLElement | null>, handler: () =
   }, [ref, handler])
 }
 
-function NavMenu({ showAdmin }: { showAdmin: boolean }) {
-  const pathname = usePathname()
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  useClickOutside(ref, () => setOpen(false))
-
-  const allItems = [
-    ...navItems,
-    ...(showAdmin ? [{ href: "/admin", label: "Admin", icon: Shield }] : []),
-  ]
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className={cn(
-          "flex h-9 w-9 items-center justify-center rounded-md transition-colors",
-          open
-            ? "bg-secondary text-foreground"
-            : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-        )}
-        aria-label="Navigation menu"
-      >
-        <Menu className="h-5 w-5" />
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-52 overflow-hidden rounded-lg border border-border bg-card shadow-lg">
-          <div className="px-3 py-2">
-            <p className="text-xs font-medium text-muted-foreground">Navigate</p>
-          </div>
-          {/* Mobile-only: search inside menu */}
-          <div className="border-t border-border px-3 py-2 sm:hidden">
-            <PlayerSearch />
-          </div>
-          <div className="border-t border-border py-1">
-            {allItems.map((item) => {
-              const isActive =
-                pathname === item.href ||
-                (item.href !== "/" && pathname.startsWith(item.href))
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  className={cn(
-                    "flex items-center gap-2.5 px-3 py-2 text-sm font-medium transition-colors",
-                    isActive
-                      ? "bg-primary/10 text-primary"
-                      : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                  )}
-                >
-                  <item.icon className="h-4 w-4" />
-                  {item.label}
-                </Link>
-              )
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
 function UserMenu() {
   const { data: session, status } = useSession()
   const [open, setOpen] = useState(false)
@@ -111,14 +48,14 @@ function UserMenu() {
   useClickOutside(ref, () => setOpen(false))
 
   if (status === "loading") {
-    return <div className="h-9 w-9 animate-pulse rounded-full bg-secondary" />
+    return <div className="h-8 w-8 animate-pulse rounded-full bg-secondary" />
   }
 
   if (!session?.user) {
     return (
       <button
         onClick={() => signIn("steam")}
-        className="flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+        className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
       >
         <LogIn className="h-3.5 w-3.5" />
         <span className="hidden sm:inline">Sign in</span>
@@ -136,10 +73,10 @@ function UserMenu() {
       <button
         onClick={() => setOpen(!open)}
         className={cn(
-          "flex h-9 items-center gap-2 rounded-md px-1.5 transition-colors",
+          "flex h-8 w-8 items-center justify-center rounded-full transition-colors",
           open
-            ? "bg-secondary text-foreground"
-            : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+            ? "ring-2 ring-primary"
+            : "hover:ring-2 hover:ring-border"
         )}
         aria-label="User menu"
       >
@@ -147,10 +84,12 @@ function UserMenu() {
           <img
             src={steam.avatarmedium}
             alt={steam.personaname ?? "Avatar"}
-            className="h-7 w-7 rounded-full"
+            className="h-8 w-8 rounded-full"
           />
         ) : (
-          <User className="h-5 w-5" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary">
+            <User className="h-4 w-4 text-muted-foreground" />
+          </div>
         )}
       </button>
 
@@ -166,8 +105,7 @@ function UserMenu() {
                   {steam.steamid}
                 </p>
               </div>
-              <div className="border-t border-border" />
-              <div className="py-1">
+              <div className="border-t border-border py-1">
                 <Link
                   href={`/player/${steam.steamid}`}
                   onClick={() => setOpen(false)}
@@ -177,10 +115,9 @@ function UserMenu() {
                   View Profile
                 </Link>
               </div>
-              <div className="border-t border-border" />
             </>
           )}
-          <div className="py-1">
+          <div className="border-t border-border py-1">
             <button
               onClick={() => {
                 setOpen(false)
@@ -199,8 +136,12 @@ function UserMenu() {
 }
 
 export function SiteHeader() {
+  const pathname = usePathname()
   const { data: session } = useSession()
   const [showAdmin, setShowAdmin] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const mobileRef = useRef<HTMLDivElement>(null)
+  useClickOutside(mobileRef, () => setMobileOpen(false))
 
   useEffect(() => {
     if (!session?.user) {
@@ -213,9 +154,19 @@ export function SiteHeader() {
       .catch(() => setShowAdmin(false))
   }, [session])
 
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileOpen(false)
+  }, [pathname])
+
+  const allNavItems = [
+    ...navItems,
+    ...(showAdmin ? [{ href: "/admin", label: "Admin", icon: Shield }] : []),
+  ]
+
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-md">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 lg:px-8">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-2.5 lg:px-8">
         {/* Left: Logo */}
         <Link href="/" className="flex shrink-0 items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
@@ -226,16 +177,78 @@ export function SiteHeader() {
           </span>
         </Link>
 
-        {/* Right: Search + Actions */}
+        {/* Center: Desktop nav links */}
+        <nav className="hidden items-center gap-0.5 lg:flex">
+          {allNavItems.map((item) => {
+            const isActive =
+              pathname === item.href ||
+              (item.href !== "/" && pathname.startsWith(item.href))
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors",
+                  isActive
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                )}
+              >
+                <item.icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            )
+          })}
+        </nav>
+
+        {/* Right: Search + User + Theme + Mobile toggle */}
         <div className="flex items-center gap-2">
           <div className="hidden sm:block">
             <PlayerSearch />
           </div>
           <ThemeToggle />
           <UserMenu />
-          <NavMenu showAdmin={showAdmin} />
+          {/* Mobile hamburger */}
+          <button
+            onClick={() => setMobileOpen(!mobileOpen)}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground lg:hidden"
+            aria-label="Toggle menu"
+          >
+            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
         </div>
       </div>
+
+      {/* Mobile nav dropdown */}
+      {mobileOpen && (
+        <div ref={mobileRef} className="border-t border-border bg-background px-4 py-3 lg:hidden">
+          <div className="mb-3 sm:hidden">
+            <PlayerSearch />
+          </div>
+          <nav className="flex flex-col gap-0.5">
+            {allNavItems.map((item) => {
+              const isActive =
+                pathname === item.href ||
+                (item.href !== "/" && pathname.startsWith(item.href))
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
+                    isActive
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  )}
+                >
+                  <item.icon className="h-4 w-4" />
+                  {item.label}
+                </Link>
+              )
+            })}
+          </nav>
+        </div>
+      )}
     </header>
   )
 }

@@ -39,11 +39,22 @@ export async function POST(request: Request) {
     }
 
     console.log("[v0] Match creation payload:", JSON.stringify(payload))
-    const data = await g5Fetch<unknown>("/api/matches", {
-      method: "POST",
-      body: payload,
-      formEncoded: true,
-    })
+    // Try JSON first, fall back to form-encoded if it fails
+    let data: unknown
+    try {
+      data = await g5Fetch<unknown>("/api/matches", {
+        method: "POST",
+        body: payload,
+        formEncoded: false,
+      })
+    } catch (jsonErr) {
+      console.log("[v0] JSON POST failed, trying form-encoded:", jsonErr)
+      data = await g5Fetch<unknown>("/api/matches", {
+        method: "POST",
+        body: payload,
+        formEncoded: true,
+      })
+    }
     console.log("[v0] Match creation response:", JSON.stringify(data))
     return NextResponse.json(data)
   } catch (error) {
