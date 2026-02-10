@@ -3,7 +3,6 @@ import { cn } from "@/lib/utils"
 import type { Match } from "@/lib/types"
 import { RelativeTime } from "@/components/relative-time"
 import { getMapDisplayName, getMapMeta } from "@/lib/maps"
-import { MapPin } from "lucide-react"
 
 function MatchStatus({ match }: { match: Match }) {
   if (match.cancelled) {

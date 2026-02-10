@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { LeaderboardTable } from "@/components/leaderboard-table"
 import type { PlayerStat } from "@/lib/types"
-import { Search, ChevronLeft, ChevronRight, ArrowUpDown, GitCompare, Calendar, ChevronDown } from "lucide-react"
+import { Search, ChevronLeft, ChevronRight, ArrowUpDown, GitCompare, Calendar } from "lucide-react"
 import type { Season } from "@/lib/types"
 
 const ITEMS_PER_PAGE = 10
