@@ -1,4 +1,4 @@
-import { fetchLeaderboard, fetchMatches } from "@/lib/api"
+import { fetchLeaderboard, fetchMatches, fetchBulkMapStats } from "@/lib/api"
 import { StatCard } from "@/components/stat-card"
 import { SteamAvatar } from "@/components/steam-avatar"
 import { fetchSteamAvatars } from "@/lib/steam"
@@ -33,26 +33,31 @@ export default async function StatsPage() {
     fetchMatches(),
   ])
 
-  // Top 5 players for avatar display
-  const topSteamIds = leaderboard.slice(0, 5).map((p) => p.steamId)
-  const avatars = await fetchSteamAvatars(topSteamIds)
-
-  // --- Aggregate Community Stats ---
-  const totalPlayers = leaderboard.length
-  const totalMatches = allMatches.length
+  // Get completed matches
   const completedMatches = allMatches.filter(
     (m) => (m.winner !== null || m.end_time !== null) && !m.cancelled && !m.forfeit
   )
+
+  // Fetch actual map stats from completed matches (up to 50 most recent) for map name data
+  const [mapStatsAll, avatars] = await Promise.all([
+    fetchBulkMapStats(
+      [...completedMatches].sort((a, b) => b.id - a.id),
+      50
+    ),
+    fetchSteamAvatars(leaderboard.slice(0, 5).map((p) => p.steamId)),
+  ])
+
   const cancelledMatches = allMatches.filter((m) => m.cancelled)
   const liveMatches = allMatches.filter(
     (m) => m.winner === null && m.end_time === null && !m.cancelled && !m.forfeit
   )
 
   // Aggregate player stats
+  const totalPlayers = leaderboard.length
+  const totalMatches = allMatches.length
   const totalKills = leaderboard.reduce((s, p) => s + p.kills, 0)
   const totalDeaths = leaderboard.reduce((s, p) => s + p.deaths, 0)
   const totalAssists = leaderboard.reduce((s, p) => s + p.assists, 0)
-  const totalRounds = leaderboard.reduce((s, p) => s + p.roundsplayed, 0)
   const totalHeadshots = leaderboard.reduce((s, p) => s + p.hsk, 0)
   const avgHSPercent =
     totalKills > 0 ? ((totalHeadshots / totalKills) * 100).toFixed(1) : "0.0"
@@ -66,11 +71,22 @@ export default async function StatsPage() {
         ).toFixed(2)
       : "0.00"
 
-  // Map popularity
+  // Total rounds: compute from match scores (more reliable than leaderboard roundsplayed)
+  // Each match score pair represents total rounds played in that match
+  const totalRoundsFromMatches = completedMatches.reduce((s, m) => {
+    const s1 = m.team1_mapscore ?? m.team1_score
+    const s2 = m.team2_mapscore ?? m.team2_score
+    return s + s1 + s2
+  }, 0)
+  // Also check leaderboard roundsplayed as fallback
+  const totalRoundsFromLeaderboard = leaderboard.reduce((s, p) => s + p.roundsplayed, 0)
+  const totalRounds = Math.max(totalRoundsFromMatches, totalRoundsFromLeaderboard)
+
+  // Map popularity: use actual map_name from map stats data (not match.title)
   const mapCounts: Record<string, number> = {}
-  for (const match of completedMatches) {
-    if (match.title) {
-      mapCounts[match.title] = (mapCounts[match.title] || 0) + 1
+  for (const ms of mapStatsAll) {
+    if (ms.map_name) {
+      mapCounts[ms.map_name] = (mapCounts[ms.map_name] || 0) + 1
     }
   }
   const sortedMaps = Object.entries(mapCounts)
@@ -89,7 +105,7 @@ export default async function StatsPage() {
 
   // Top aimers (by HS%)
   const topAimers = [...leaderboard]
-    .filter((p) => p.kills >= 50) // minimum kills threshold
+    .filter((p) => p.kills >= 50)
     .sort((a, b) => b.hsp - a.hsp)
     .slice(0, 5)
 
@@ -109,7 +125,7 @@ export default async function StatsPage() {
     .sort((a, b) => b.k5 - a.k5)
     .slice(0, 5)
 
-  // Average match score (for completed matches with scores)
+  // Average rounds per match
   const matchScores = completedMatches
     .map((m) => {
       const s1 = m.team1_mapscore ?? m.team1_score
@@ -145,7 +161,7 @@ export default async function StatsPage() {
       <section className="mb-10 grid grid-cols-2 gap-4 lg:grid-cols-4 animate-fade-in-up stagger-1">
         <StatCard label="Players" value={totalPlayers} icon={Users} />
         <StatCard label="Matches Played" value={completedMatches.length} icon={Swords} />
-        <StatCard label="Total Rounds" value={totalRounds.toLocaleString()} icon={Target} />
+        <StatCard label="Total Rounds" value={totalRounds > 0 ? totalRounds.toLocaleString() : "N/A"} icon={Target} />
         <StatCard label="Avg Rating" value={avgRating} icon={Zap} />
       </section>
 

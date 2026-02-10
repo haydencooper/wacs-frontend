@@ -554,12 +554,22 @@ export async function fetchPlayerRecentMatches(
       })
       const raw = unwrapArray(data, "matches")
       if (raw.length > 0) {
-        // users/recent returned matches
+        // Deduplicate by match ID (users/recent may return per-map rows)
+        const uniqueIds = [...new Set(raw.map((r) => String(r.id ?? r.match_id ?? "")))]
+          .filter(Boolean)
+          .slice(0, 10)
         const fullMatches = await Promise.all(
-          raw.map((r) => fetchMatch(String(r.id)))
+          uniqueIds.map((id) => fetchMatch(id))
         )
         const result = fullMatches.filter((m): m is Match => m !== null)
-        if (result.length > 0) return result
+        // Further deduplicate just in case
+        const seen = new Set<number>()
+        const deduped = result.filter((m) => {
+          if (seen.has(m.id)) return false
+          seen.add(m.id)
+          return true
+        })
+        if (deduped.length > 0) return deduped.slice(0, 5)
       }
     } catch {
       // G5API may 404 or error for unknown users — fall through to strategy 2
@@ -649,6 +659,21 @@ export async function fetchPlayerTeamInMatches(
   )
   
   return result
+}
+
+/**
+ * Fetch map stats for multiple matches in parallel. Returns a flat array of all MapStat entries.
+ * Used by the community stats page to get map name data.
+ */
+export async function fetchBulkMapStats(
+  matches: Match[],
+  limit = 50
+): Promise<MapStat[]> {
+  const batch = matches.slice(0, limit)
+  const results = await Promise.all(
+    batch.map((m) => fetchMapStats(String(m.id), m))
+  )
+  return results.flat()
 }
 
 export async function fetchSeasons(): Promise<Season[]> {

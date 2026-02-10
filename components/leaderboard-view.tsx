@@ -4,16 +4,22 @@ import { useState, useMemo, useRef, useEffect, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { LeaderboardTable } from "@/components/leaderboard-table"
-import type { PlayerStat } from "@/lib/types"
+import type { PlayerStat, Season, Match } from "@/lib/types"
 import { Search, ChevronLeft, ChevronRight, ArrowUpDown, GitCompare, Calendar } from "lucide-react"
-import type { Season } from "@/lib/types"
 
 const ITEMS_PER_PAGE = 10
 
 type SortKey = "points" | "average_rating" | "kills" | "kd" | "winPct"
 type SortDir = "asc" | "desc"
 
-export function LeaderboardView({ players, avatars = {}, seasons = [] }: { players: PlayerStat[]; avatars?: Record<string, string>; seasons?: Season[] }) {
+interface LeaderboardViewProps {
+  players: PlayerStat[]
+  avatars?: Record<string, string>
+  seasons?: Season[]
+  matches?: Match[]
+}
+
+export function LeaderboardView({ players, avatars = {}, seasons = [], matches = [] }: LeaderboardViewProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -26,7 +32,39 @@ export function LeaderboardView({ players, avatars = {}, seasons = [] }: { playe
   )
   const [page, setPage] = useState(Number(searchParams.get("page")) || 1)
   const [compareIds, setCompareIds] = useState<string[]>([])
+  const [selectedSeason, setSelectedSeason] = useState<number | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
+
+  // Build a set of player steamIds that participated in the selected season
+  const seasonPlayerIds = useMemo(() => {
+    if (selectedSeason === null) return null
+    const ids = new Set<string>()
+    for (const m of matches) {
+      if (m.season_id === selectedSeason && !m.cancelled) {
+        // team strings in PUGs often contain player names
+        // but we can't reliably extract steam IDs from team strings
+        // Instead, we mark all matches from this season and show all players
+        // that have at least one match in this season
+        // Since we don't have per-match player rosters in the match list data,
+        // we'll filter by showing only players who exist AND have the season's matches
+      }
+    }
+    // Since we only have match-level data (not player-match associations) from the match list,
+    // the best we can do without additional API calls is filter matches by season and use
+    // team_string name matching as a heuristic
+    const seasonMatches = matches.filter((m) => m.season_id === selectedSeason && !m.cancelled)
+    for (const m of seasonMatches) {
+      const t1Lower = m.team1_string.toLowerCase()
+      const t2Lower = m.team2_string.toLowerCase()
+      for (const p of players) {
+        const nameLower = p.name.toLowerCase()
+        if (t1Lower.includes(nameLower) || t2Lower.includes(nameLower)) {
+          ids.add(p.steamId)
+        }
+      }
+    }
+    return ids
+  }, [selectedSeason, matches, players])
 
   // Sync state to URL
   const updateUrl = useCallback((q: string, sort: SortKey, dir: SortDir, p: number) => {
@@ -54,6 +92,11 @@ export function LeaderboardView({ players, avatars = {}, seasons = [] }: { playe
 
   const filtered = useMemo(() => {
     let result = [...players]
+
+    // Filter by season
+    if (seasonPlayerIds !== null) {
+      result = result.filter((p) => seasonPlayerIds.has(p.steamId))
+    }
 
     if (search.trim()) {
       const q = search.toLowerCase()
@@ -90,7 +133,7 @@ export function LeaderboardView({ players, avatars = {}, seasons = [] }: { playe
     })
 
     return result
-  }, [players, search, sortKey, sortDir])
+  }, [players, search, sortKey, sortDir, seasonPlayerIds])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE))
   const currentPage = Math.min(page, totalPages)
@@ -143,6 +186,11 @@ export function LeaderboardView({ players, avatars = {}, seasons = [] }: { playe
   function handlePageChange(p: number) {
     setPage(p)
     updateUrl(search, sortKey, sortDir, p)
+  }
+
+  function handleSeasonChange(seasonId: number | null) {
+    setSelectedSeason(seasonId)
+    setPage(1)
   }
 
   function handleCompareToggle(steamId: string) {
@@ -209,30 +257,41 @@ export function LeaderboardView({ players, avatars = {}, seasons = [] }: { playe
           </div>
         </div>
 
-        {/* Season filter (if seasons available) */}
+        {/* Season filter */}
         {seasons.length > 0 && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
               <Calendar className="h-3.5 w-3.5" />
               Season:
             </span>
-            <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              onClick={() => handleSeasonChange(null)}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                selectedSeason === null
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+              }`}
+            >
+              All Seasons
+            </button>
+            {seasons.map((season) => (
               <button
-                onClick={() => {/* Season filter is informational for now - all stats are global from G5API */}}
-                className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground"
+                key={season.id}
+                onClick={() => handleSeasonChange(season.id)}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                  selectedSeason === season.id
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                }`}
               >
-                All Seasons
+                {season.name}
               </button>
-              {seasons.map((season) => (
-                <span
-                  key={season.id}
-                  className="rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-muted-foreground"
-                  title={`Season data is aggregated globally by G5API. Individual season filtering requires per-season leaderboard endpoints.`}
-                >
-                  {season.name}
-                </span>
-              ))}
-            </div>
+            ))}
+            {selectedSeason !== null && seasonPlayerIds !== null && (
+              <span className="ml-1 text-[11px] text-muted-foreground">
+                {seasonPlayerIds.size} player{seasonPlayerIds.size !== 1 ? "s" : ""} found
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -273,7 +332,11 @@ export function LeaderboardView({ players, avatars = {}, seasons = [] }: { playe
         <div className="rounded-lg border border-border bg-card p-12 text-center">
           <Search className="mx-auto h-8 w-8 text-muted-foreground" />
           <p className="mt-3 text-sm font-medium text-foreground">No players found</p>
-          <p className="mt-1 text-sm text-muted-foreground">Try adjusting your search query.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {selectedSeason !== null
+              ? "No players found for this season. Try selecting a different season."
+              : "Try adjusting your search query."}
+          </p>
         </div>
       ) : (
         <>
