@@ -6,7 +6,7 @@ import { AutoRefresh } from "@/components/auto-refresh"
 import { SteamAvatar } from "@/components/steam-avatar"
 import { fetchLeaderboard, fetchMatches, fetchServers } from "@/lib/api"
 import { fetchSteamAvatars } from "@/lib/steam"
-import { Users, Swords, Trophy, Server, ArrowRight, Zap, TrendingUp } from "lucide-react"
+import { Users, Swords, Trophy, Server, ArrowRight, Zap, TrendingUp, Star } from "lucide-react"
 import Link from "next/link"
 
 export const dynamic = "force-dynamic"
@@ -34,6 +34,13 @@ export default async function DashboardPage() {
   const liveMatches = recentMatches.filter(
     (m) => m.winner === null && m.end_time === null && !m.cancelled && !m.forfeit
   )
+
+  // Player of the Week: highest rating among players with at least 3 maps
+  const playerOfTheWeek = leaderboard.length > 0
+    ? [...leaderboard]
+        .filter((p) => p.total_maps >= 3)
+        .sort((a, b) => b.average_rating - a.average_rating)[0] ?? null
+    : null
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-8 lg:px-8">
@@ -123,6 +130,48 @@ export default async function DashboardPage() {
               </div>
             )}
           </div>
+        </section>
+      )}
+
+      {/* Player of the Week */}
+      {playerOfTheWeek && playerOfTheWeek.steamId !== topPlayer?.steamId && (
+        <section className="mb-10 animate-fade-in-up stagger-1">
+          <Link
+            href={`/player/${playerOfTheWeek.steamId}`}
+            className="group flex items-center gap-4 rounded-lg border border-border bg-card p-5 transition-all hover:border-primary/20 hover:bg-primary/5"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary">
+              <Star className="h-5 w-5 text-foreground" />
+            </div>
+            <SteamAvatar
+              avatarUrl={avatars[playerOfTheWeek.steamId]}
+              name={playerOfTheWeek.name}
+              size="lg"
+              className="rounded-lg"
+            />
+            <div className="flex-1">
+              <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
+                Player of the Week
+              </p>
+              <p className="mt-0.5 text-lg font-semibold text-foreground">{playerOfTheWeek.name}</p>
+            </div>
+            <div className="flex items-center gap-6 text-right">
+              <div>
+                <p className="font-mono text-2xl font-bold text-foreground">{playerOfTheWeek.average_rating.toFixed(2)}</p>
+                <p className="text-[11px] text-muted-foreground">Rating</p>
+              </div>
+              <div>
+                <p className="font-mono text-2xl font-bold text-foreground">
+                  {playerOfTheWeek.deaths > 0 ? (playerOfTheWeek.kills / playerOfTheWeek.deaths).toFixed(2) : "N/A"}
+                </p>
+                <p className="text-[11px] text-muted-foreground">K/D</p>
+              </div>
+              <div>
+                <p className="font-mono text-2xl font-bold text-foreground">{playerOfTheWeek.wins}</p>
+                <p className="text-[11px] text-muted-foreground">Wins</p>
+              </div>
+            </div>
+          </Link>
         </section>
       )}
 

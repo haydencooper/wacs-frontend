@@ -6,11 +6,15 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { PlayerStat } from "@/lib/types"
 import { SteamAvatar } from "@/components/steam-avatar"
-import { Search, GitCompare, ArrowLeft, ChevronDown } from "lucide-react"
+import { Search, GitCompare, ArrowLeft, ChevronDown, Swords } from "lucide-react"
+import type { Match } from "@/lib/types"
 
 interface PlayerComparisonProps {
   players: PlayerStat[]
   avatars: Record<string, string>
+  matches?: Match[]
+  /** matchId -> { steamId -> teamNumber (1 or 2) } */
+  matchParticipants?: Record<number, Record<string, number>>
 }
 
 interface ComparisonStat {
@@ -323,7 +327,7 @@ function ComparisonBar({
   )
 }
 
-export function PlayerComparison({ players, avatars }: PlayerComparisonProps) {
+export function PlayerComparison({ players, avatars, matches = [], matchParticipants = {} }: PlayerComparisonProps) {
   const searchParams = useSearchParams()
   const initialId1 = searchParams.get("player1") ?? ""
   const initialId2 = searchParams.get("player2") ?? ""
@@ -455,6 +459,78 @@ export function PlayerComparison({ players, avatars }: PlayerComparisonProps) {
               </div>
             </div>
           </div>
+
+          {/* Head-to-Head Match Record */}
+          {(() => {
+            // Use pre-computed match participants to find matches where both
+            // players participated on OPPOSING teams
+            let p1Wins = 0
+            let p2Wins = 0
+            let h2hCount = 0
+
+            for (const m of matches) {
+              if (m.cancelled) continue
+              const participants = matchParticipants[m.id]
+              if (!participants) continue
+
+              const p1Team = participants[player1.steamId]
+              const p2Team = participants[player2.steamId]
+              // __winner is a special key set by the server with the correct winning team number
+              const winningTeam = participants["__winner"]
+
+              // Both must be present and on different teams, and we need a winner
+              if (!p1Team || !p2Team || p1Team === p2Team || !winningTeam) continue
+
+              h2hCount++
+              // Did player1's team win?
+              if (winningTeam === p1Team) {
+                p1Wins++
+              } else if (winningTeam === p2Team) {
+                p2Wins++
+              }
+            }
+
+            if (h2hCount === 0) return null
+
+            return (
+              <div className="mb-8 rounded-xl border border-border bg-card p-6">
+                <div className="mb-4 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  <Swords className="h-3.5 w-3.5" />
+                  Head-to-Head Record
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="text-center">
+                    <div className={cn("font-mono text-2xl font-bold", p1Wins > p2Wins ? "text-win" : "text-foreground")}>
+                      {p1Wins}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">{player1.name}</div>
+                  </div>
+                  <div className="flex-1 text-center">
+                    <div className="text-xs text-muted-foreground">
+                      {h2hCount} match{h2hCount !== 1 ? "es" : ""} on opposing teams
+                    </div>
+                    {/* Bar visualization */}
+                    <div className="mx-auto mt-2 flex h-2 max-w-xs overflow-hidden rounded-full bg-secondary">
+                      <div
+                        className={cn("rounded-l-full", p1Wins > p2Wins ? "bg-win" : "bg-muted-foreground/30")}
+                        style={{ width: `${h2hCount > 0 ? (p1Wins / h2hCount) * 100 : 50}%` }}
+                      />
+                      <div
+                        className={cn("rounded-r-full", p2Wins > p1Wins ? "bg-win" : "bg-muted-foreground/30")}
+                        style={{ width: `${h2hCount > 0 ? (p2Wins / h2hCount) * 100 : 50}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className={cn("font-mono text-2xl font-bold", p2Wins > p1Wins ? "text-win" : "text-foreground")}>
+                      {p2Wins}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">{player2.name}</div>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Stat-by-stat comparison */}
           <div className="rounded-xl border border-border bg-card px-6 divide-y divide-border/30">
