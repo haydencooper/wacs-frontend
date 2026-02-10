@@ -23,27 +23,60 @@ export async function POST(request: Request) {
   }
 
   try {
-    const payload: Record<string, unknown> = {
+    // Step 1: Create teams in G5API (it expects team IDs, not names)
+    console.log("[v0] Creating team 1:", body.team1_name)
+    const team1Res = await g5Fetch<{ id?: number; team?: { id?: number }; message?: string }>("/api/teams", {
+      method: "POST",
+      body: [{ name: body.team1_name, flag: "", logo: "", public_team: 1, is_pug: 1 }],
+    })
+    const team1Id = team1Res?.id ?? team1Res?.team?.id
+    console.log("[v0] Team 1 created, response:", JSON.stringify(team1Res), "id:", team1Id)
+
+    if (!team1Id) {
+      return NextResponse.json(
+        { error: `Failed to create team 1: ${JSON.stringify(team1Res)}` },
+        { status: 502 }
+      )
+    }
+
+    console.log("[v0] Creating team 2:", body.team2_name)
+    const team2Res = await g5Fetch<{ id?: number; team?: { id?: number }; message?: string }>("/api/teams", {
+      method: "POST",
+      body: [{ name: body.team2_name, flag: "", logo: "", public_team: 1, is_pug: 1 }],
+    })
+    const team2Id = team2Res?.id ?? team2Res?.team?.id
+    console.log("[v0] Team 2 created, response:", JSON.stringify(team2Res), "id:", team2Id)
+
+    if (!team2Id) {
+      return NextResponse.json(
+        { error: `Failed to create team 2: ${JSON.stringify(team2Res)}` },
+        { status: 502 }
+      )
+    }
+
+    // Step 2: Create the match with team IDs
+    // G5API POST /api/matches expects req.body[0] (array-wrapped payload)
+    const matchPayload: Record<string, unknown> = {
       server_id: Number(body.server_id),
-      team1_name: body.team1_name,
-      team2_name: body.team2_name,
+      team1_id: team1Id,
+      team2_id: team2Id,
       max_maps: body.max_maps ?? 1,
+      title: `${body.team1_name} vs ${body.team2_name}`,
+      skip_veto: false,
       is_pug: true,
+      enforce_teams: 0,
+      players_per_team: body.players_per_team ? Number(body.players_per_team) : 5,
     }
 
     if (body.veto_mappool) {
-      payload.veto_mappool = body.veto_mappool
-    }
-    if (body.players_per_team) {
-      payload.players_per_team = Number(body.players_per_team)
+      matchPayload.veto_mappool = body.veto_mappool
     }
 
-    console.log("[v0] Match creation payload:", JSON.stringify(payload))
+    console.log("[v0] Creating match with payload:", JSON.stringify([matchPayload]))
 
     const data = await g5Fetch<unknown>("/api/matches", {
       method: "POST",
-      body: payload,
-      formEncoded: true,
+      body: [matchPayload],
     })
 
     console.log("[v0] Match creation response:", JSON.stringify(data))
