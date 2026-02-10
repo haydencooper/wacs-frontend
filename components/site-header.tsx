@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import {
   Crosshair,
@@ -254,9 +255,11 @@ function UserMenu() {
         aria-label="User menu"
       >
         {steam?.avatarmedium ? (
-          <img
+          <Image
             src={steam.avatarmedium}
             alt={steam.personaname ?? "Avatar"}
+            width={32}
+            height={32}
             className="h-8 w-8 rounded-full"
           />
         ) : (

@@ -166,7 +166,7 @@ export async function g5Fetch<T>(
 // G5API wraps all responses in an object like { matches: [...] } or { match: {...} }
 // These helpers extract the actual data.
 
-function unwrapArray(data: unknown, ...keys: string[]): Record<string, unknown>[] {
+export function unwrapArray(data: unknown, ...keys: string[]): Record<string, unknown>[] {
   if (!data || typeof data !== "object") return []
   if (Array.isArray(data)) return data as Record<string, unknown>[]
   const obj = data as Record<string, unknown>
@@ -177,7 +177,7 @@ function unwrapArray(data: unknown, ...keys: string[]): Record<string, unknown>[
   return []
 }
 
-function unwrapObject(data: unknown, ...keys: string[]): Record<string, unknown> | null {
+export function unwrapObject(data: unknown, ...keys: string[]): Record<string, unknown> | null {
   if (!data || typeof data !== "object") return null
   if (Array.isArray(data)) return (data[0] as Record<string, unknown>) ?? null
   const obj = data as Record<string, unknown>
@@ -193,7 +193,7 @@ function unwrapObject(data: unknown, ...keys: string[]): Record<string, unknown>
 
 // ── Rating Calculation (HLTV Rating 1.0) ─────────────────
 // Mirrors G5API's Utils.getRating()
-function computeRating(
+export function computeRating(
   kills: number,
   roundsPlayed: number,
   deaths: number,
@@ -213,7 +213,7 @@ function computeRating(
 
 // ── Normalizers ──────────────────────────────────────────
 
-function normalizePlayer(raw: Record<string, unknown>): PlayerStat {
+export function normalizePlayer(raw: Record<string, unknown>): PlayerStat {
   const kills = Number(raw.kills ?? 0)
   const deaths = Number(raw.deaths ?? 0)
   const assists = Number(raw.assists ?? 0)
@@ -264,7 +264,7 @@ function normalizePlayer(raw: Record<string, unknown>): PlayerStat {
   }
 }
 
-function normalizeMatch(raw: Record<string, unknown>): Match {
+export function normalizeMatch(raw: Record<string, unknown>): Match {
   const team1Id = Number(raw.team1_id ?? 0)
   const team2Id = Number(raw.team2_id ?? 0)
   const rawWinner = raw.winner !== null && raw.winner !== undefined
@@ -334,7 +334,7 @@ function normalizeMatch(raw: Record<string, unknown>): Match {
   }
 }
 
-function normalizeMapStat(
+export function normalizeMapStat(
   raw: Record<string, unknown>,
   match?: Match | null
 ): MapStat {
@@ -369,7 +369,7 @@ function normalizeMapStat(
   }
 }
 
-function normalizeServer(raw: Record<string, unknown>): Server {
+export function normalizeServer(raw: Record<string, unknown>): Server {
   return {
     id: Number(raw.id ?? 0),
     ip_string: String(raw.ip_string ?? ""),

@@ -4,7 +4,7 @@ import { LeaderboardTable } from "@/components/leaderboard-table"
 import { ServerStatus } from "@/components/server-status"
 import { AutoRefresh } from "@/components/auto-refresh"
 import { SteamAvatar } from "@/components/steam-avatar"
-import { fetchLeaderboard, fetchMatches, fetchServers } from "@/lib/api"
+import { fetchLeaderboard, fetchMatches, fetchServers, fetchMatchPlayerStats } from "@/lib/api"
 import { fetchSteamAvatars } from "@/lib/steam"
 import { Users, Swords, Trophy, Server, ArrowRight, Zap, TrendingUp, Star } from "lucide-react"
 import Link from "next/link"
@@ -35,12 +35,78 @@ export default async function DashboardPage() {
     (m) => m.winner === null && m.end_time === null && !m.cancelled && !m.forfeit
   )
 
-  // Player of the Week: highest rating among players with at least 3 maps
-  const playerOfTheWeek = leaderboard.length > 0
-    ? [...leaderboard]
-        .filter((p) => p.total_maps >= 3)
-        .sort((a, b) => b.average_rating - a.average_rating)[0] ?? null
-    : null
+  // Player of the Week: highest average rating among players active in the last 7 days
+  // We filter matches to the past week, fetch per-match player stats, and aggregate.
+  const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+  const weeklyMatches = recentMatches.filter((m) => {
+    if (!m.start_time || m.cancelled) return false
+    const t = new Date(m.start_time)
+    return t >= oneWeekAgo && m.winner !== null
+  })
+
+  let playerOfTheWeek: typeof leaderboard[number] | null = null
+
+  if (weeklyMatches.length > 0) {
+    // Aggregate per-player stats from this week's matches
+    const weeklyAgg = new Map<string, { kills: number; deaths: number; rounds: number; maps: number; k1: number; k2: number; k3: number; k4: number; k5: number }>()
+
+    const BATCH_SIZE = 10
+    for (let i = 0; i < weeklyMatches.length; i += BATCH_SIZE) {
+      const batch = weeklyMatches.slice(i, i + BATCH_SIZE)
+      const results = await Promise.all(
+        batch.map((m) => fetchMatchPlayerStats(String(m.id), m))
+      )
+      for (const { team1, team2 } of results) {
+        for (const p of [...team1, ...team2]) {
+          const existing = weeklyAgg.get(p.steamId)
+          if (existing) {
+            existing.kills += p.kills
+            existing.deaths += p.deaths
+            existing.rounds += p.roundsplayed
+            existing.maps += 1
+            existing.k1 += p.k1
+            existing.k2 += p.k2
+            existing.k3 += p.k3
+            existing.k4 += p.k4
+            existing.k5 += p.k5
+          } else {
+            weeklyAgg.set(p.steamId, {
+              kills: p.kills,
+              deaths: p.deaths,
+              rounds: p.roundsplayed,
+              maps: 1,
+              k1: p.k1,
+              k2: p.k2,
+              k3: p.k3,
+              k4: p.k4,
+              k5: p.k5,
+            })
+          }
+        }
+      }
+    }
+
+    // Find the player with the highest HLTV rating this week (min 2 maps)
+    let bestRating = 0
+    let bestSteamId: string | null = null
+    for (const [steamId, agg] of weeklyAgg) {
+      if (agg.maps < 2 || agg.rounds === 0) continue
+      const killRating = agg.kills / agg.rounds / 0.679
+      const survivalRating = (agg.rounds - agg.deaths) / agg.rounds / 0.317
+      const multiKillBonus =
+        (agg.k1 + 4 * agg.k2 + 9 * agg.k3 + 16 * agg.k4 + 25 * agg.k5) / agg.rounds / 1.277
+      const rating = (killRating + 0.7 * survivalRating + multiKillBonus) / 2.7
+      if (rating > bestRating) {
+        bestRating = rating
+        bestSteamId = steamId
+      }
+    }
+
+    if (bestSteamId) {
+      // Use the leaderboard entry for display (has name, full stats, etc.)
+      playerOfTheWeek = leaderboard.find((p) => p.steamId === bestSteamId) ?? null
+    }
+  }
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-8 lg:px-8">
