@@ -151,8 +151,8 @@ export async function g5Fetch<T>(
     )
   }
 
-  const contentType = res.headers.get("content-type") ?? ""
-  if (!contentType.includes("application/json")) {
+  const resContentType = res.headers.get("content-type") ?? ""
+  if (!resContentType.includes("application/json")) {
     const text = await res.text()
     throw new Error(
       `G5API returned non-JSON response for ${path}: ${text.slice(0, 200)}`
