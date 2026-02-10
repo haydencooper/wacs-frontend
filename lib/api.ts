@@ -609,6 +609,48 @@ export async function fetchPlayerRecentMatches(
   }
 }
 
+/**
+ * For each match, determine which team a player was on by checking match player stats.
+ * Returns a map of matchId -> teamNumber (1 or 2) or null if unknown.
+ */
+export async function fetchPlayerTeamInMatches(
+  steamId: string,
+  matches: Match[]
+): Promise<Map<number, number | null>> {
+  const result = new Map<number, number | null>()
+  
+  await Promise.all(
+    matches.map(async (match) => {
+      try {
+        const data = await g5Fetch<unknown>(
+          `/api/playerstats/match/${match.id}`,
+          { revalidate: 120 }
+        )
+        const stats = unwrapArray(data, "playerstats", "playerStats")
+        const playerRow = stats.find(
+          (s) => String(s.steam_id ?? s.steamId ?? "") === steamId
+        )
+        if (playerRow) {
+          const teamId = Number(playerRow.team_id ?? 0)
+          if (teamId === match.team1_id) {
+            result.set(match.id, 1)
+          } else if (teamId === match.team2_id) {
+            result.set(match.id, 2)
+          } else {
+            result.set(match.id, null)
+          }
+        } else {
+          result.set(match.id, null)
+        }
+      } catch {
+        result.set(match.id, null)
+      }
+    })
+  )
+  
+  return result
+}
+
 export async function fetchSeasons(): Promise<Season[]> {
   try {
     const data = await g5Fetch<unknown>("/api/seasons", { revalidate: 300 })

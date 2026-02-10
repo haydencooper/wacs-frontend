@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { SessionProvider } from "@/components/session-provider"
 import { ScrollToTop } from "@/components/scroll-to-top"
 import { AppToaster } from "@/components/app-toaster"
+import { KeyboardShortcutsHelp } from "@/components/keyboard-shortcuts-help"
 import { getServerSession } from "next-auth"
 import { getAuthOptions } from "@/lib/auth"
 import "./globals.css"
@@ -67,6 +68,7 @@ export default async function RootLayout({
             </div>
             <ScrollToTop />
             <AppToaster />
+            <KeyboardShortcutsHelp />
           </ThemeProvider>
         </SessionProvider>
       </body>

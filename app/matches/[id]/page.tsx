@@ -2,10 +2,14 @@ import { fetchMatch, fetchMapStats, fetchMatchPlayerStats } from "@/lib/api"
 import { fetchSteamAvatars } from "@/lib/steam"
 import { cn } from "@/lib/utils"
 import { SteamAvatar } from "@/components/steam-avatar"
-import { ArrowLeft, Clock, MapPin, Swords, Trophy } from "lucide-react"
+import { Clock, MapPin, Swords, Trophy } from "lucide-react"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import { MatchScoreboard } from "@/components/match-scoreboard"
+import { Breadcrumbs } from "@/components/breadcrumbs"
+import { ShareButton } from "@/components/share-button"
+import { LiveMatchRefresh } from "@/components/live-match-refresh"
+import { getMapDisplayName, getMapMeta } from "@/lib/maps"
 
 export const dynamic = "force-dynamic"
 
@@ -27,16 +31,7 @@ function getDuration(start: string, end: string | null) {
   return `${minutes} min`
 }
 
-const MAP_DISPLAY: Record<string, string> = {
-  de_inferno: "Inferno",
-  de_mirage: "Mirage",
-  de_anubis: "Anubis",
-  de_dust2: "Dust II",
-  de_nuke: "Nuke",
-  de_overpass: "Overpass",
-  de_vertigo: "Vertigo",
-  de_ancient: "Ancient",
-}
+
 
 export default async function MatchDetailPage({
   params,
@@ -87,13 +82,18 @@ export default async function MatchDetailPage({
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-8 lg:px-8">
-      <Link
-        href="/matches"
-        className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to matches
-      </Link>
+      <Breadcrumbs items={[
+        { label: "Dashboard", href: "/" },
+        { label: "Matches", href: "/matches" },
+        { label: `Match #${match.id}` },
+      ]} />
+
+      {/* Live auto-refresh for in-progress matches */}
+      {isLive && (
+        <div className="mb-6">
+          <LiveMatchRefresh isLive={isLive} interval={15} />
+        </div>
+      )}
 
       {/* Match Header - Hero */}
       <div className={cn(
@@ -183,7 +183,10 @@ export default async function MatchDetailPage({
           </div>
 
           {/* Match meta */}
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-xs text-muted-foreground">
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-4 text-xs text-muted-foreground">
+            <ShareButton className="text-xs" />
+          </div>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-6 text-xs text-muted-foreground">
             <div className="flex items-center gap-1.5">
               <Clock className="h-3.5 w-3.5" />
               <span>{formatDateTime(match.start_time)}</span>
@@ -243,15 +246,29 @@ export default async function MatchDetailPage({
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {maps.map((map) => {
               const mapWinner = map.winner
+              const mapMeta = getMapMeta(map.map_name)
               return (
                 <div key={map.id} className={cn(
-                  "rounded-lg border bg-card p-5",
+                  "relative overflow-hidden rounded-lg border bg-card p-5",
                   mapWinner ? "border-border" : "border-border"
                 )}>
+                  {/* Map color accent bar */}
+                  <div
+                    className="absolute inset-x-0 top-0 h-1"
+                    style={{ backgroundColor: mapMeta.color }}
+                  />
                   <div className="mb-4 flex items-center justify-between">
-                    <span className="text-sm font-bold text-foreground">
-                      {MAP_DISPLAY[map.map_name] || map.map_name}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="flex h-6 w-6 items-center justify-center rounded text-[9px] font-bold text-card"
+                        style={{ backgroundColor: mapMeta.color }}
+                      >
+                        {mapMeta.code}
+                      </span>
+                      <span className="text-sm font-bold text-foreground">
+                        {getMapDisplayName(map.map_name) || map.map_name}
+                      </span>
+                    </div>
                     {match.max_maps > 1 && (
                       <span className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground">
                         Map {map.map_number}

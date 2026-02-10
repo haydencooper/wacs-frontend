@@ -1,11 +1,14 @@
-import { fetchLeaderboard } from "@/lib/api"
+import { fetchLeaderboard, fetchSeasons } from "@/lib/api"
 import { fetchSteamAvatars } from "@/lib/steam"
 import { LeaderboardView } from "@/components/leaderboard-view"
 
 export const dynamic = "force-dynamic"
 
 export default async function LeaderboardPage() {
-  const players = await fetchLeaderboard()
+  const [players, seasons] = await Promise.all([
+    fetchLeaderboard(),
+    fetchSeasons(),
+  ])
   const steamIds = players.map((p) => p.steamId)
   const avatars = await fetchSteamAvatars(steamIds)
 
@@ -29,7 +32,7 @@ export default async function LeaderboardPage() {
       </section>
 
       <div className="animate-fade-in-up stagger-1">
-        <LeaderboardView players={players} avatars={avatars} />
+        <LeaderboardView players={players} avatars={avatars} seasons={seasons} />
       </div>
     </div>
   )

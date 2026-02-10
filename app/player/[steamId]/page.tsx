@@ -1,11 +1,10 @@
-import { fetchPlayerStats, fetchLeaderboard, fetchPlayerRecentMatches } from "@/lib/api"
+import { fetchPlayerStats, fetchLeaderboard, fetchPlayerRecentMatches, fetchPlayerTeamInMatches } from "@/lib/api"
 import { fetchSteamAvatar } from "@/lib/steam"
-import { MatchCard } from "@/components/match-card"
+import { MatchCardWithOutcome } from "@/components/match-card-with-outcome"
 import { SteamAvatar } from "@/components/steam-avatar"
 import { PlayerBadges } from "@/components/player-badges"
 import { cn } from "@/lib/utils"
 import {
-  ArrowLeft,
   Crosshair,
   Target,
   Skull,
@@ -18,6 +17,8 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { notFound } from "next/navigation"
+import { Breadcrumbs } from "@/components/breadcrumbs"
+import { ShareButton } from "@/components/share-button"
 
 export const dynamic = "force-dynamic"
 
@@ -101,8 +102,14 @@ export default async function PlayerProfilePage({
 
   if (!player) notFound()
 
-  // Fetch Steam avatar
-  const avatarUrl = await fetchSteamAvatar(steamId)
+  // Fetch Steam avatar and player team info for recent matches
+  const playerTeamsPromise = recentMatches.length > 0
+    ? fetchPlayerTeamInMatches(steamId, recentMatches)
+    : Promise.resolve(new Map<number, number | null>())
+  const [avatarUrl, playerTeams] = await Promise.all([
+    fetchSteamAvatar(steamId),
+    playerTeamsPromise,
+  ])
 
   const rank = leaderboard.findIndex((p) => p.steamId === steamId) + 1
   const kd = player.deaths > 0 ? (player.kills / player.deaths).toFixed(2) : "0.00"
@@ -128,13 +135,11 @@ export default async function PlayerProfilePage({
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-8 lg:px-8">
-      <Link
-        href="/leaderboard"
-        className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back to leaderboard
-      </Link>
+      <Breadcrumbs items={[
+        { label: "Dashboard", href: "/" },
+        { label: "Leaderboard", href: "/leaderboard" },
+        { label: player.name },
+      ]} />
 
       {/* Player Header - Hero */}
       <div className="relative mb-8 overflow-hidden rounded-xl border border-border bg-card p-8 animate-fade-in-up">
@@ -200,6 +205,7 @@ export default async function PlayerProfilePage({
             <GitCompare className="h-4 w-4" />
             Compare with another player
           </Link>
+          <ShareButton />
         </div>
       </div>
 
@@ -297,7 +303,11 @@ export default async function PlayerProfilePage({
           <h2 className="mb-4 font-heading text-lg font-medium text-foreground">Recent Matches</h2>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {recentMatches.map((match) => (
-              <MatchCard key={match.id} match={match} />
+              <MatchCardWithOutcome
+                key={match.id}
+                match={match}
+                playerTeam={playerTeams.get(match.id) ?? null}
+              />
             ))}
           </div>
         </section>

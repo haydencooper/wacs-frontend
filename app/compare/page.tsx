@@ -1,5 +1,5 @@
 import { Suspense } from "react"
-import { fetchLeaderboard } from "@/lib/api"
+import { fetchLeaderboard, fetchMatches } from "@/lib/api"
 import { fetchSteamAvatars } from "@/lib/steam"
 import { PlayerComparison } from "@/components/player-comparison"
 import { GitCompare } from "lucide-react"
@@ -23,11 +23,14 @@ function ComparisonLoading() {
 }
 
 async function ComparisonContent() {
-  const players = await fetchLeaderboard()
+  const [players, matches] = await Promise.all([
+    fetchLeaderboard(),
+    fetchMatches(),
+  ])
   const steamIds = players.map((p) => p.steamId)
   const avatars = await fetchSteamAvatars(steamIds)
 
-  return <PlayerComparison players={players} avatars={avatars} />
+  return <PlayerComparison players={players} avatars={avatars} matches={matches} />
 }
 
 export default function ComparePage() {

@@ -5,14 +5,15 @@ import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { LeaderboardTable } from "@/components/leaderboard-table"
 import type { PlayerStat } from "@/lib/types"
-import { Search, ChevronLeft, ChevronRight, ArrowUpDown, GitCompare } from "lucide-react"
+import { Search, ChevronLeft, ChevronRight, ArrowUpDown, GitCompare, Calendar, ChevronDown } from "lucide-react"
+import type { Season } from "@/lib/types"
 
 const ITEMS_PER_PAGE = 10
 
 type SortKey = "points" | "average_rating" | "kills" | "kd" | "winPct"
 type SortDir = "asc" | "desc"
 
-export function LeaderboardView({ players, avatars = {} }: { players: PlayerStat[]; avatars?: Record<string, string> }) {
+export function LeaderboardView({ players, avatars = {}, seasons = [] }: { players: PlayerStat[]; avatars?: Record<string, string>; seasons?: Season[] }) {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -167,44 +168,73 @@ export function LeaderboardView({ players, avatars = {} }: { players: PlayerStat
   return (
     <>
       {/* Controls */}
-      <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            ref={searchRef}
-            type="text"
-            placeholder="Search players..."
-            value={search}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            className="w-full rounded-xl border border-border bg-card py-2.5 pl-10 pr-12 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-          />
-          <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded border border-border bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-            /
-          </kbd>
+      <div className="mb-6 flex flex-col gap-4">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="relative max-w-sm flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              ref={searchRef}
+              type="text"
+              placeholder="Search players..."
+              value={search}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="w-full rounded-xl border border-border bg-card py-2.5 pl-10 pr-12 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded border border-border bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+              /
+            </kbd>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <ArrowUpDown className="h-3.5 w-3.5" />
+              Sort by:
+            </span>
+            {sortOptions.map((opt) => (
+              <button
+                key={opt.key}
+                onClick={() => handleSortChange(opt.key)}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                  sortKey === opt.key
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                }`}
+              >
+                {opt.label}
+                {sortKey === opt.key && (
+                  <span className="ml-1">{sortDir === "desc" ? "\u2193" : "\u2191"}</span>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <ArrowUpDown className="h-3.5 w-3.5" />
-            Sort by:
-          </span>
-          {sortOptions.map((opt) => (
-            <button
-              key={opt.key}
-              onClick={() => handleSortChange(opt.key)}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                sortKey === opt.key
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-              }`}
-            >
-              {opt.label}
-              {sortKey === opt.key && (
-                <span className="ml-1">{sortDir === "desc" ? "\u2193" : "\u2191"}</span>
-              )}
-            </button>
-          ))}
-        </div>
+        {/* Season filter (if seasons available) */}
+        {seasons.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <Calendar className="h-3.5 w-3.5" />
+              Season:
+            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                onClick={() => {/* Season filter is informational for now - all stats are global from G5API */}}
+                className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground"
+              >
+                All Seasons
+              </button>
+              {seasons.map((season) => (
+                <span
+                  key={season.id}
+                  className="rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-muted-foreground"
+                  title={`Season data is aggregated globally by G5API. Individual season filtering requires per-season leaderboard endpoints.`}
+                >
+                  {season.name}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Compare bar */}
