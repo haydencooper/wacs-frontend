@@ -35,7 +35,7 @@ export function SteamAuthButton() {
             ) : (
               <User className="h-4 w-4" />
             )}
-            <span className="hidden md:inline max-w-24 truncate lg:max-w-none">{steam.personaname ?? "Player"}</span>
+            <span className="hidden xl:inline max-w-28 truncate">{steam.personaname ?? "Player"}</span>
           </Link>
         )}
         <button

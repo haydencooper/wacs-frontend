@@ -47,7 +47,7 @@ export function SiteHeader() {
           </span>
         </Link>
 
-        <nav className="hidden items-center gap-1 lg:flex">
+        <nav className="hidden items-center gap-0.5 md:flex">
           {navItems.map((item) => {
             const isActive =
               pathname === item.href ||
@@ -56,43 +56,45 @@ export function SiteHeader() {
               <Link
                 key={item.href}
                 href={item.href}
+                title={item.label}
                 className={cn(
-                  "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                  "flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium transition-colors xl:px-3 xl:py-2",
                   isActive
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                 )}
               >
                 <item.icon className="h-4 w-4" />
-                {item.label}
+                <span className="hidden xl:inline">{item.label}</span>
               </Link>
             )
           })}
           {showAdmin && (
             <Link
               href="/admin"
+              title="Admin"
               className={cn(
-                "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                "flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium transition-colors xl:px-3 xl:py-2",
                 pathname.startsWith("/admin")
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-secondary hover:text-foreground"
               )}
             >
               <Shield className="h-4 w-4" />
-              Admin
+              <span className="hidden xl:inline">Admin</span>
             </Link>
           )}
         </nav>
 
-        <div className="flex items-center gap-3">
-          <div className="hidden md:block">
+        <div className="flex items-center gap-2">
+          <div className="hidden lg:block">
             <PlayerSearch />
           </div>
           <SteamAuthButton />
           <ThemeToggle />
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="rounded-md p-2 text-muted-foreground hover:bg-secondary lg:hidden"
+            className="rounded-md p-2 text-muted-foreground hover:bg-secondary md:hidden"
             aria-label="Toggle menu"
           >
             {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -101,8 +103,8 @@ export function SiteHeader() {
       </div>
 
       {mobileOpen && (
-        <nav className="border-t border-border bg-background px-4 py-2 lg:hidden">
-          <div className="mb-2 md:hidden">
+        <nav className="border-t border-border bg-background px-4 py-2 md:hidden">
+          <div className="mb-2 lg:hidden">
             <PlayerSearch />
           </div>
           {navItems.map((item) => {
