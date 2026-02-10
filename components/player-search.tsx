@@ -115,7 +115,7 @@ export function PlayerSearch() {
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
           placeholder="Search players..."
-          className="h-8 w-40 rounded-md border border-border bg-card pl-8 pr-8 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 sm:w-52"
+          className="h-8 w-36 rounded-md border border-border bg-card pl-8 pr-8 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 xl:w-48"
           aria-label="Search players"
           autoComplete="off"
         />
@@ -164,7 +164,7 @@ export function PlayerSearch() {
                       <span className="font-medium text-foreground">{player.name}</span>
                     </div>
                     <div className="flex items-center gap-3 text-xs">
-                      <span className="flex items-center gap-1 text-amber-500">
+                      <span className="flex items-center gap-1 text-live">
                         <Trophy className="h-3 w-3" />
                         {player.points}
                       </span>

@@ -40,22 +40,53 @@ function isLive(match: Match): boolean {
   return match.winner === null && match.end_time === null && !match.cancelled && !match.forfeit
 }
 
+const CS2_COMPETITIVE_MAPS = [
+  "de_dust2",
+  "de_mirage",
+  "de_inferno",
+  "de_nuke",
+  "de_ancient",
+  "de_anubis",
+  "de_overpass",
+] as const
+
 function CreateMatchDialog({ servers, onClose, onSuccess }: { servers: Server[]; onClose: () => void; onSuccess: () => void }) {
   const [team1Name, setTeam1Name] = useState("")
   const [team2Name, setTeam2Name] = useState("")
-  const [maxMaps, setMaxMaps] = useState<1 | 2 | 3>(1)
+  const [maxMaps, setMaxMaps] = useState<1 | 3 | 5>(1)
   const [serverId, setServerId] = useState("")
+  const [mapPool, setMapPool] = useState<string[]>([...CS2_COMPETITIVE_MAPS].slice(0, 7))
+  const [playersPerTeam, setPlayersPerTeam] = useState(5)
   const [loading, setLoading] = useState(false)
   const availableServers = servers.filter((s) => !s.in_use)
 
+  function toggleMap(mapName: string) {
+    setMapPool((prev) =>
+      prev.includes(mapName)
+        ? prev.filter((m) => m !== mapName)
+        : [...prev, mapName]
+    )
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (mapPool.length < maxMaps) {
+      toast.error("Not enough maps selected", { description: `You need at least ${maxMaps} map${maxMaps > 1 ? "s" : ""} for a BO${maxMaps} series.` })
+      return
+    }
     setLoading(true)
     try {
       const res = await fetch("/api/admin/matches/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ team1_name: team1Name, team2_name: team2Name, max_maps: maxMaps, server_id: serverId || undefined }),
+        body: JSON.stringify({
+          team1_name: team1Name,
+          team2_name: team2Name,
+          max_maps: maxMaps,
+          server_id: serverId || undefined,
+          veto_mappool: mapPool.join(" "),
+          players_per_team: playersPerTeam,
+        }),
       })
       const data = await res.json().catch(() => ({}))
       if (res.ok) {
@@ -71,11 +102,11 @@ function CreateMatchDialog({ servers, onClose, onSuccess }: { servers: Server[];
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="mx-4 w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="mx-4 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-border bg-card p-6 shadow-xl">
         <h3 className="mb-2 text-lg font-semibold text-foreground">Create Match</h3>
         <p className="mb-6 text-sm text-muted-foreground">Set up a new match between two teams.</p>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium text-foreground">Team 1 Name</label>
@@ -90,7 +121,7 @@ function CreateMatchDialog({ servers, onClose, onSuccess }: { servers: Server[];
             <div>
               <label className="mb-1 block text-sm font-medium text-foreground">Series Type</label>
               <div className="flex gap-2">
-                {([1, 2, 3] as const).map((n) => (
+                {([1, 3, 5] as const).map((n) => (
                   <button key={n} type="button" onClick={() => setMaxMaps(n)} className={cn("flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors", maxMaps === n ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:bg-secondary")}>
                     BO{n}
                   </button>
@@ -98,21 +129,55 @@ function CreateMatchDialog({ servers, onClose, onSuccess }: { servers: Server[];
               </div>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">Server</label>
-              <select value={serverId} onChange={(e) => setServerId(e.target.value)} required className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary">
+              <label className="mb-1 block text-sm font-medium text-foreground">Players per Team</label>
+              <div className="flex gap-2">
+                {[1, 2, 3, 5].map((n) => (
+                  <button key={n} type="button" onClick={() => setPlayersPerTeam(n)} className={cn("flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors", playersPerTeam === n ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:bg-secondary")}>
+                    {n}v{n}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-foreground">Server</label>
+            <div className="relative">
+              <select value={serverId} onChange={(e) => setServerId(e.target.value)} required className="w-full appearance-none rounded-lg border border-border bg-background px-3 py-2 pr-8 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary">
                 <option value="">Select a server...</option>
                 {availableServers.map((s) => (
                   <option key={s.id} value={s.id}>{s.display_name}</option>
                 ))}
               </select>
-              {availableServers.length === 0 && (
-                <p className="mt-1 text-xs text-red-500">No servers available — all servers are in use</p>
-              )}
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                <svg className="h-4 w-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </div>
             </div>
+            {availableServers.length === 0 && (
+              <p className="mt-1 text-xs text-destructive">No servers available -- all servers are in use</p>
+            )}
+          </div>
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <label className="text-sm font-medium text-foreground">Map Pool</label>
+              <span className="text-xs text-muted-foreground">{mapPool.length} selected</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {CS2_COMPETITIVE_MAPS.map((mapName) => {
+                const selected = mapPool.includes(mapName)
+                return (
+                  <button key={mapName} type="button" onClick={() => toggleMap(mapName)} className={cn("rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors", selected ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:bg-secondary")}>
+                    {mapName.replace("de_", "")}
+                  </button>
+                )
+              })}
+            </div>
+            {mapPool.length < maxMaps && (
+              <p className="mt-1 text-xs text-destructive">Select at least {maxMaps} maps for a BO{maxMaps} series</p>
+            )}
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={onClose} disabled={loading} className="rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary disabled:opacity-50">Cancel</button>
-            <button type="submit" disabled={loading} className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50">
+            <button type="submit" disabled={loading || mapPool.length < maxMaps} className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50">
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
               Create Match
             </button>
