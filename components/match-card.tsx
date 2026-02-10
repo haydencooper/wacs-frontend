@@ -2,19 +2,7 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { Match } from "@/lib/types"
 import { RelativeTime } from "@/components/relative-time"
-import { MapPin } from "lucide-react"
-
-const MAP_DISPLAY: Record<string, string> = {
-  de_inferno: "Inferno",
-  de_mirage: "Mirage",
-  de_anubis: "Anubis",
-  de_dust2: "Dust II",
-  de_nuke: "Nuke",
-  de_overpass: "Overpass",
-  de_vertigo: "Vertigo",
-  de_ancient: "Ancient",
-  de_train: "Train",
-}
+import { getMapDisplayName, getMapMeta } from "@/lib/maps"
 
 function MatchStatus({ match }: { match: Match }) {
   if (match.cancelled) {
@@ -58,9 +46,8 @@ export function MatchCard({ match }: { match: Match }) {
   const displayScore2 = match.team2_mapscore ?? match.team2_score
 
   // Extract map name from title if it matches a known map
-  const mapName = match.title
-    ? MAP_DISPLAY[match.title] ?? (match.title.startsWith("de_") ? match.title.replace("de_", "").replace(/^\w/, c => c.toUpperCase()) : null)
-    : null
+  const mapName = getMapDisplayName(match.title)
+  const mapMeta = getMapMeta(match.title)
 
   return (
     <Link
@@ -82,8 +69,13 @@ export function MatchCard({ match }: { match: Match }) {
           {mapName && (
             <>
               <span className="h-1 w-1 rounded-full bg-border" />
-              <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                <MapPin className="h-3 w-3" />
+              <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <span
+                  className="flex h-4 w-4 items-center justify-center rounded text-[7px] font-bold text-card"
+                  style={{ backgroundColor: mapMeta.color }}
+                >
+                  {mapMeta.code}
+                </span>
                 {mapName}
               </span>
             </>
