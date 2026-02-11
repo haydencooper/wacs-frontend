@@ -483,29 +483,134 @@ export async function fetchMatchPlayerStats(
 }
 
 /**
- * Fetch the set of unique steam IDs that participated in any of the given matches.
- * Makes one API call per match to `/api/playerstats/match/:id` and collects
- * all steam_id values. Failures for individual matches are silently skipped.
+ * Fetch and aggregate player stats across all matches in a season.
+ * Makes one API call per match to `/api/playerstats/match/:id`, then
+ * sums stats per player across all matches to produce competition-specific
+ * PlayerStat objects. Also tracks wins per player based on match outcomes.
+ *
+ * Returns an array of PlayerStat sorted by average_rating descending.
+ * Individual match failures are silently skipped.
  */
-export async function fetchSeasonPlayerSteamIds(
+export async function fetchSeasonPlayerStats(
   matches: Match[],
-): Promise<Set<string>> {
-  const ids = new Set<string>()
-  const results = await Promise.allSettled(
+): Promise<PlayerStat[]> {
+  // Accumulator: steamId → { name, per-field sums, matchWins, mapsPlayed }
+  const accum = new Map<
+    string,
+    {
+      name: string
+      kills: number
+      deaths: number
+      assists: number
+      roundsplayed: number
+      k1: number; k2: number; k3: number; k4: number; k5: number
+      v1: number; v2: number; v3: number; v4: number; v5: number
+      headshot_kills: number
+      mapsPlayed: number
+      matchWins: number
+    }
+  >()
+
+  function ensurePlayer(steamId: string, name: string) {
+    if (!accum.has(steamId)) {
+      accum.set(steamId, {
+        name,
+        kills: 0, deaths: 0, assists: 0, roundsplayed: 0,
+        k1: 0, k2: 0, k3: 0, k4: 0, k5: 0,
+        v1: 0, v2: 0, v3: 0, v4: 0, v5: 0,
+        headshot_kills: 0, mapsPlayed: 0, matchWins: 0,
+      })
+    }
+  }
+
+  await Promise.allSettled(
     matches.map(async (m) => {
       const data = await g5Fetch<unknown>(
         `/api/playerstats/match/${m.id}`,
         { revalidate: 300 },
       )
       const rows = unwrapArray(data, "playerstats", "playerStats")
+
+      // Determine which team_id won this match
+      const winningTeamId =
+        m.winner === 1 ? m.team1_id :
+        m.winner === 2 ? m.team2_id :
+        null
+
+      // Track which steamIds are on the winning team for this match
+      const winnerSteamIds = new Set<string>()
+
       for (const row of rows) {
         const steamId = String(row.steam_id ?? row.steamId ?? "")
-        if (steamId) ids.add(steamId)
+        if (!steamId) continue
+        const name = String(row.name ?? "Unknown")
+        const teamId = Number(row.team_id ?? 0)
+
+        ensurePlayer(steamId, name)
+        const p = accum.get(steamId)!
+
+        // Update name to most recent
+        if (name !== "Unknown") p.name = name
+
+        p.kills += Number(row.kills ?? 0)
+        p.deaths += Number(row.deaths ?? 0)
+        p.assists += Number(row.assists ?? 0)
+        p.roundsplayed += Number(row.roundsplayed ?? row.rounds_played ?? 0)
+        p.k1 += Number(row.k1 ?? 0)
+        p.k2 += Number(row.k2 ?? 0)
+        p.k3 += Number(row.k3 ?? 0)
+        p.k4 += Number(row.k4 ?? 0)
+        p.k5 += Number(row.k5 ?? 0)
+        p.v1 += Number(row.v1 ?? 0)
+        p.v2 += Number(row.v2 ?? 0)
+        p.v3 += Number(row.v3 ?? 0)
+        p.v4 += Number(row.v4 ?? 0)
+        p.v5 += Number(row.v5 ?? 0)
+        p.headshot_kills += Number(row.headshot_kills ?? row.hsk ?? 0)
+        p.mapsPlayed += 1
+
+        if (winningTeamId !== null && teamId === winningTeamId) {
+          winnerSteamIds.add(steamId)
+        }
+      }
+
+      // Credit match wins (once per match, not per map row).
+      // Since raw data may have multiple rows per player (one per map),
+      // we use the winnerSteamIds set which is already deduplicated.
+      for (const steamId of winnerSteamIds) {
+        const p = accum.get(steamId)
+        if (p) p.matchWins += 1
       }
     }),
   )
-  // Just return whatever we collected; individual failures are ignored
-  return ids
+
+  // Convert accumulated data into PlayerStat objects via normalizePlayer
+  const result: PlayerStat[] = []
+  for (const [steamId, p] of accum) {
+    const stat = normalizePlayer({
+      steamId,
+      steam_id: steamId,
+      name: p.name,
+      kills: p.kills,
+      deaths: p.deaths,
+      assists: p.assists,
+      roundsplayed: p.roundsplayed,
+      k1: p.k1, k2: p.k2, k3: p.k3, k4: p.k4, k5: p.k5,
+      v1: p.v1, v2: p.v2, v3: p.v3, v4: p.v4, v5: p.v5,
+      headshot_kills: p.headshot_kills,
+      hsp: 0,
+      average_rating: 0,
+      wins: p.matchWins,
+      total_maps: p.mapsPlayed,
+      points: 0,
+    })
+    result.push(stat)
+  }
+
+  // Sort by rating descending
+  result.sort((a, b) => b.average_rating - a.average_rating)
+
+  return result
 }
 
 export async function fetchPlayerRecentMatches(
