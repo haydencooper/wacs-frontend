@@ -1,5 +1,6 @@
-import { fetchPlayerStats, fetchLeaderboard, fetchPlayerRecentMatches, fetchPlayerTeamInMatches } from "@/lib/api"
+import { fetchPlayerStats, fetchLeaderboard, fetchPlayerRecentMatches, fetchPlayerTeamInMatches, fetchSeasons, fetchMatches, fetchMatchPlayerStats } from "@/lib/api"
 import { fetchSteamAvatar } from "@/lib/steam"
+import { deriveCompetitionWinner, getCompetitionStatus } from "@/lib/competitions"
 import { MatchCardWithOutcome } from "@/components/match-card-with-outcome"
 import { SteamAvatar } from "@/components/steam-avatar"
 import { PlayerBadges } from "@/components/player-badges"
@@ -94,10 +95,12 @@ export default async function PlayerProfilePage({
   params: Promise<{ steamId: string }>
 }) {
   const { steamId } = await params
-  const [player, leaderboard, recentMatches] = await Promise.all([
+  const [player, leaderboard, recentMatches, seasons, allMatches] = await Promise.all([
     fetchPlayerStats(steamId),
     fetchLeaderboard(),
     fetchPlayerRecentMatches(steamId),
+    fetchSeasons(),
+    fetchMatches(),
   ])
 
   if (!player) notFound()
@@ -112,6 +115,47 @@ export default async function PlayerProfilePage({
   ])
 
   const rank = leaderboard.findIndex((p) => p.steamId === steamId) + 1
+
+  // Compute competition wins for this player
+  const matchesBySeason = new Map<number | null, typeof allMatches>()
+  for (const m of allMatches) {
+    const sid = m.season_id
+    if (!matchesBySeason.has(sid)) matchesBySeason.set(sid, [])
+    matchesBySeason.get(sid)!.push(m)
+  }
+
+  let competitionWins = 0
+  // For each ended competition, check if this player was on the winning team
+  const compChecks: Promise<void>[] = []
+  for (const season of seasons) {
+    if (getCompetitionStatus(season) !== "Ended") continue
+    const seasonMatches = matchesBySeason.get(season.id) ?? []
+    const winner = deriveCompetitionWinner(seasonMatches)
+    if (!winner) continue
+
+    // Find a completed match where the winning team played
+    const winnerMatch = seasonMatches.find(
+      (m) =>
+        m.winner !== null &&
+        !m.cancelled &&
+        !m.forfeit &&
+        (m.team1_string === winner.teamName || m.team2_string === winner.teamName),
+    )
+    if (!winnerMatch) continue
+
+    compChecks.push(
+      fetchMatchPlayerStats(String(winnerMatch.id), winnerMatch)
+        .then(({ team1, team2 }) => {
+          const isTeam1 = winnerMatch.team1_string === winner.teamName
+          const roster = isTeam1 ? team1 : team2
+          if (roster.some((p) => p.steamId === steamId)) {
+            competitionWins++
+          }
+        })
+        .catch(() => {}),
+    )
+  }
+  await Promise.allSettled(compChecks)
   const kd = player.deaths > 0 ? (player.kills / player.deaths).toFixed(2) : "0.00"
   const winPct = player.total_maps > 0 ? ((player.wins / player.total_maps) * 100).toFixed(1) : "0.0"
   const losses = player.total_maps - player.wins
@@ -236,7 +280,7 @@ export default async function PlayerProfilePage({
 
       {/* Achievements / Badges */}
       <section className="mb-8">
-        <PlayerBadges player={player} rank={rank} />
+        <PlayerBadges player={player} rank={rank} competitionWins={competitionWins} />
       </section>
 
       {/* Advanced Stats */}

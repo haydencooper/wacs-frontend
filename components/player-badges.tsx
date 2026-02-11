@@ -13,6 +13,10 @@ import {
   Swords,
   Medal,
   Sparkles,
+  Heart,
+  HandHelping,
+  Timer,
+  Gem,
 } from "lucide-react"
 
 export interface Badge {
@@ -27,12 +31,49 @@ export interface Badge {
 
 const tierOrder = { diamond: 0, gold: 1, silver: 2, bronze: 3 }
 
-function computeBadges(player: PlayerStat, rank: number): Badge[] {
+function computeBadges(player: PlayerStat, rank: number, competitionWins: number): Badge[] {
   const badges: Badge[] = []
   const kd = player.deaths > 0 ? player.kills / player.deaths : 0
   const winPct = player.total_maps > 0 ? (player.wins / player.total_maps) * 100 : 0
   const totalClutches = player.v1 + player.v2 + player.v3 + player.v4 + player.v5
   const totalMultiKills = player.k3 + player.k4 + player.k5
+  const assistRatio = player.kills > 0 ? player.assists / player.kills : 0
+  const survivalRate = player.roundsplayed > 0
+    ? ((player.roundsplayed - player.deaths) / player.roundsplayed) * 100
+    : 0
+
+  // ── Competition title badges ──
+  if (competitionWins >= 3) {
+    badges.push({
+      id: "comp-dynasty",
+      label: "Dynasty",
+      description: `${competitionWins} competition titles — a true dynasty`,
+      icon: Gem,
+      color: "text-cyan-400",
+      bgColor: "bg-cyan-400/10 border-cyan-400/20",
+      tier: "diamond",
+    })
+  } else if (competitionWins >= 2) {
+    badges.push({
+      id: "comp-repeat",
+      label: "Back to Back",
+      description: `${competitionWins} competition titles`,
+      icon: Gem,
+      color: "text-amber-400",
+      bgColor: "bg-amber-400/10 border-amber-400/20",
+      tier: "gold",
+    })
+  } else if (competitionWins >= 1) {
+    badges.push({
+      id: "comp-winner",
+      label: "Title Winner",
+      description: "Won a competition",
+      icon: Gem,
+      color: "text-slate-300",
+      bgColor: "bg-slate-300/10 border-slate-300/20",
+      tier: "silver",
+    })
+  }
 
   // ── Rank-based badges ──
   if (rank === 1) {
@@ -97,6 +138,19 @@ function computeBadges(player: PlayerStat, rank: number): Badge[] {
       color: "text-slate-300",
       bgColor: "bg-slate-300/10 border-slate-300/20",
       tier: "silver",
+    })
+  }
+
+  // ── Terminator: K/D + volume combo ──
+  if (kd >= 1.5 && player.kills >= 1000) {
+    badges.push({
+      id: "terminator",
+      label: "Terminator",
+      description: `${kd.toFixed(2)} K/D with ${player.kills.toLocaleString()} kills`,
+      icon: Skull,
+      color: "text-cyan-400",
+      bgColor: "bg-cyan-400/10 border-cyan-400/20",
+      tier: "diamond",
     })
   }
 
@@ -167,7 +221,17 @@ function computeBadges(player: PlayerStat, rank: number): Badge[] {
   }
 
   // ── Headshot badges ──
-  if (player.hsp >= 60) {
+  if (player.hsp >= 70 && player.kills >= 100) {
+    badges.push({
+      id: "hs-diamond",
+      label: "Head Machine",
+      description: `${player.hsp.toFixed(1)}% headshot rate — aimbot suspect`,
+      icon: Target,
+      color: "text-cyan-400",
+      bgColor: "bg-cyan-400/10 border-cyan-400/20",
+      tier: "diamond",
+    })
+  } else if (player.hsp >= 60) {
     badges.push({
       id: "hs-gold",
       label: "Headhunter",
@@ -183,6 +247,52 @@ function computeBadges(player: PlayerStat, rank: number): Badge[] {
       label: "Precise",
       description: `${player.hsp.toFixed(1)}% headshot percentage`,
       icon: Target,
+      color: "text-slate-300",
+      bgColor: "bg-slate-300/10 border-slate-300/20",
+      tier: "silver",
+    })
+  }
+
+  // ── Support / Team player badges ──
+  if (assistRatio >= 0.7 && player.total_maps >= 5) {
+    badges.push({
+      id: "support-gold",
+      label: "Playmaker",
+      description: `${player.assists.toLocaleString()} assists — ${(assistRatio * 100).toFixed(0)}% assist-to-kill ratio`,
+      icon: HandHelping,
+      color: "text-amber-400",
+      bgColor: "bg-amber-400/10 border-amber-400/20",
+      tier: "gold",
+    })
+  } else if (assistRatio >= 0.5 && player.total_maps >= 5) {
+    badges.push({
+      id: "support-silver",
+      label: "Team Player",
+      description: `${player.assists.toLocaleString()} assists — always setting up teammates`,
+      icon: HandHelping,
+      color: "text-slate-300",
+      bgColor: "bg-slate-300/10 border-slate-300/20",
+      tier: "silver",
+    })
+  }
+
+  // ── Survival badges ──
+  if (survivalRate >= 50 && player.roundsplayed >= 200) {
+    badges.push({
+      id: "survive-gold",
+      label: "Survivor",
+      description: `Survived ${survivalRate.toFixed(0)}% of rounds played`,
+      icon: Heart,
+      color: "text-amber-400",
+      bgColor: "bg-amber-400/10 border-amber-400/20",
+      tier: "gold",
+    })
+  } else if (survivalRate >= 40 && player.roundsplayed >= 100) {
+    badges.push({
+      id: "survive-silver",
+      label: "Hard to Kill",
+      description: `Survived ${survivalRate.toFixed(0)}% of rounds played`,
+      icon: Heart,
       color: "text-slate-300",
       bgColor: "bg-slate-300/10 border-slate-300/20",
       tier: "silver",
@@ -212,7 +322,28 @@ function computeBadges(player: PlayerStat, rank: number): Badge[] {
       tier: "gold",
     })
   }
-  if (totalClutches >= 20) {
+  if (player.v3 >= 3) {
+    badges.push({
+      id: "clutch-v3",
+      label: "Against All Odds",
+      description: `Won ${player.v3} 1v3 clutches`,
+      icon: Shield,
+      color: "text-amber-400",
+      bgColor: "bg-amber-400/10 border-amber-400/20",
+      tier: "gold",
+    })
+  }
+  if (totalClutches >= 50) {
+    badges.push({
+      id: "clutch-total-diamond",
+      label: "Clutch God",
+      description: `${totalClutches} total clutch rounds won`,
+      icon: Shield,
+      color: "text-cyan-400",
+      bgColor: "bg-cyan-400/10 border-cyan-400/20",
+      tier: "diamond",
+    })
+  } else if (totalClutches >= 20) {
     badges.push({
       id: "clutch-total",
       label: "Ice Cold",
@@ -250,6 +381,17 @@ function computeBadges(player: PlayerStat, rank: number): Badge[] {
       id: "ace",
       label: "Ace",
       description: `Achieved ${player.k5} ace${player.k5 > 1 ? "s" : ""}`,
+      icon: Zap,
+      color: "text-amber-400",
+      bgColor: "bg-amber-400/10 border-amber-400/20",
+      tier: "gold",
+    })
+  }
+  if (player.k4 >= 5) {
+    badges.push({
+      id: "quad-king",
+      label: "Quad King",
+      description: `${player.k4} 4K rounds`,
       icon: Zap,
       color: "text-amber-400",
       bgColor: "bg-amber-400/10 border-amber-400/20",
@@ -321,6 +463,29 @@ function computeBadges(player: PlayerStat, rank: number): Badge[] {
     })
   }
 
+  // ── Rounds played milestone badges ──
+  if (player.roundsplayed >= 3000) {
+    badges.push({
+      id: "rounds-3k",
+      label: "Ironman",
+      description: `${player.roundsplayed.toLocaleString()} rounds played — built different`,
+      icon: Timer,
+      color: "text-cyan-400",
+      bgColor: "bg-cyan-400/10 border-cyan-400/20",
+      tier: "diamond",
+    })
+  } else if (player.roundsplayed >= 1000) {
+    badges.push({
+      id: "rounds-1k",
+      label: "Grinder",
+      description: `${player.roundsplayed.toLocaleString()} rounds played`,
+      icon: Timer,
+      color: "text-amber-400",
+      bgColor: "bg-amber-400/10 border-amber-400/20",
+      tier: "gold",
+    })
+  }
+
   // ── Match milestone badges ──
   if (player.total_maps >= 100) {
     badges.push({
@@ -383,11 +548,13 @@ function TierLabel({ tier }: { tier: Badge["tier"] }) {
 export function PlayerBadges({
   player,
   rank,
+  competitionWins = 0,
 }: {
   player: PlayerStat
   rank: number
+  competitionWins?: number
 }) {
-  const badges = computeBadges(player, rank)
+  const badges = computeBadges(player, rank, competitionWins)
 
   if (badges.length === 0) {
     return (

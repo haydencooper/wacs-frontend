@@ -14,6 +14,7 @@ import {
   User,
   LogIn,
   BarChart3,
+  Crown,
   X,
 } from "lucide-react"
 import { useState, useEffect, useRef, useCallback } from "react"
@@ -27,6 +28,7 @@ const navItems = [
   { href: "/matches", label: "Matches", icon: Swords },
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
   { href: "/competitions", label: "Competitions", icon: Trophy },
+  { href: "/hall-of-fame", label: "Hall of Fame", icon: Crown },
   { href: "/compare", label: "Compare", icon: GitCompare },
   { href: "/stats", label: "Stats", icon: BarChart3 },
 ]
