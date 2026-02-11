@@ -15,7 +15,6 @@ yarn.lock
 .env
 .env.local
 .env.*.local
-.env.example
 .claude
 .vscode
 vercel.json

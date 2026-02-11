@@ -5,6 +5,7 @@ import { isAdmin } from "@/lib/admin"
 import { fetchMatches, fetchServers } from "@/lib/api"
 import { AdminPanel } from "@/components/admin-panel"
 import { Shield } from "lucide-react"
+import { Breadcrumbs } from "@/components/breadcrumbs"
 
 export const dynamic = "force-dynamic"
 
@@ -22,6 +23,7 @@ export default async function AdminPage() {
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-8 lg:px-8">
+      <Breadcrumbs items={[{ label: "Dashboard", href: "/" }, { label: "Admin" }]} />
       <section className="mb-6 animate-fade-in-up">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">

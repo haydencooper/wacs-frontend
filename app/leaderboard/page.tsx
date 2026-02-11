@@ -1,6 +1,7 @@
 import { fetchLeaderboard, fetchSeasons, fetchMatches } from "@/lib/api"
 import { fetchSteamAvatars } from "@/lib/steam"
 import { LeaderboardView } from "@/components/leaderboard-view"
+import { Breadcrumbs } from "@/components/breadcrumbs"
 
 export const dynamic = "force-dynamic"
 
@@ -15,6 +16,7 @@ export default async function LeaderboardPage() {
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-8 lg:px-8">
+      <Breadcrumbs items={[{ label: "Dashboard", href: "/" }, { label: "Leaderboard" }]} />
       <section className="mb-6 animate-fade-in-up">
         <div className="flex items-center gap-3">
           <h1 className="font-heading text-balance text-3xl font-semibold tracking-tight text-foreground">

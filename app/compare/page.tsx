@@ -1,5 +1,6 @@
 import { Suspense } from "react"
-import { fetchLeaderboard, fetchMatches, g5Fetch } from "@/lib/api"
+import { Breadcrumbs } from "@/components/breadcrumbs"
+import { fetchLeaderboard, fetchMatches, g5Fetch, unwrapArray } from "@/lib/api"
 import { fetchSteamAvatars } from "@/lib/steam"
 import { PlayerComparison } from "@/components/player-comparison"
 import { GitCompare } from "lucide-react"
@@ -32,11 +33,10 @@ async function computeMatchParticipants(
 ): Promise<Map<number, Map<string, number>>> {
   const result = new Map<number, Map<string, number>>()
   
-  // Only check completed non-cancelled matches, limit to most recent 100 for performance
+  // Check all completed non-cancelled matches for accurate H2H data
   const candidates = matches
     .filter((m) => m.winner !== null && !m.cancelled)
     .sort((a, b) => b.id - a.id)
-    .slice(0, 100)
   
   const BATCH_SIZE = 10
   for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
@@ -49,14 +49,7 @@ async function computeMatchParticipants(
             { revalidate: 120 }
           )
           if (!data) return
-          // unwrap manually to avoid circular import issues
-          const arr = Array.isArray(data) 
-            ? data 
-            : Array.isArray((data as Record<string, unknown>).playerstats) 
-              ? (data as Record<string, unknown>).playerstats as Record<string, unknown>[]
-              : Array.isArray((data as Record<string, unknown>).playerStats)
-                ? (data as Record<string, unknown>).playerStats as Record<string, unknown>[]
-                : []
+          const arr = unwrapArray(data, "playerstats", "playerStats")
           // First pass: collect all unique team_ids from player stats
           const rawTeamData: { steamId: string; teamId: number }[] = []
           for (const row of arr as Record<string, unknown>[]) {
@@ -135,15 +128,6 @@ async function computeMatchParticipants(
     )
   }
   
-  console.log(`[v0] computeMatchParticipants: processed ${candidates.length} matches, got participants for ${result.size} matches`)
-  // Log a sample of the data
-  let sampleCount = 0
-  for (const [matchId, playerMap] of result) {
-    if (sampleCount >= 3) break
-    console.log(`[v0] Match ${matchId}: ${playerMap.size} players mapped to teams`, Object.fromEntries(playerMap))
-    sampleCount++
-  }
-  
   return result
 }
 
@@ -186,8 +170,13 @@ async function ComparisonContent() {
 
 export default function ComparePage() {
   return (
-    <Suspense fallback={<ComparisonLoading />}>
-      <ComparisonContent />
-    </Suspense>
+    <>
+      <div className="mx-auto w-full max-w-4xl px-4 pt-8 lg:px-8">
+        <Breadcrumbs items={[{ label: "Dashboard", href: "/" }, { label: "Compare" }]} />
+      </div>
+      <Suspense fallback={<ComparisonLoading />}>
+        <ComparisonContent />
+      </Suspense>
+    </>
   )
 }

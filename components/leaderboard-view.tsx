@@ -6,8 +6,9 @@ import Link from "next/link"
 import { LeaderboardTable } from "@/components/leaderboard-table"
 import type { PlayerStat, Season, Match } from "@/lib/types"
 import { Search, ChevronLeft, ChevronRight, ArrowUpDown, GitCompare, Calendar } from "lucide-react"
+import { PAGE_SIZE } from "@/lib/constants"
 
-const ITEMS_PER_PAGE = 10
+const ITEMS_PER_PAGE = PAGE_SIZE
 
 type SortKey = "points" | "average_rating" | "kills" | "kd" | "winPct"
 type SortDir = "asc" | "desc"
@@ -17,41 +18,61 @@ interface LeaderboardViewProps {
   avatars?: Record<string, string>
   seasons?: Season[]
   matches?: Match[]
+  /** Pre-select a season on mount (used when embedded in competition detail). */
+  initialSeason?: number
+  /** When true, state is managed locally without syncing to URL search params. */
+  disableUrlSync?: boolean
+  /** When true, the season filter buttons are hidden (useful when already scoped to a competition). */
+  hideSeasonFilter?: boolean
+  /**
+   * Pre-computed list of steam IDs that participated in the season.
+   * When provided, this bypasses the name-matching heuristic for season filtering.
+   * Useful when team names don't contain individual player names.
+   */
+  participantSteamIds?: string[]
 }
 
-export function LeaderboardView({ players, avatars = {}, seasons = [], matches = [] }: LeaderboardViewProps) {
+export function LeaderboardView({
+  players,
+  avatars = {},
+  seasons = [],
+  matches = [],
+  initialSeason,
+  disableUrlSync = false,
+  hideSeasonFilter = false,
+  participantSteamIds,
+}: LeaderboardViewProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  const [search, setSearch] = useState(searchParams.get("q") ?? "")
+  const [search, setSearch] = useState(disableUrlSync ? "" : (searchParams.get("q") ?? ""))
   const [sortKey, setSortKey] = useState<SortKey>(
-    (searchParams.get("sort") as SortKey) || "points"
+    disableUrlSync ? "points" : ((searchParams.get("sort") as SortKey) || "points")
   )
   const [sortDir, setSortDir] = useState<SortDir>(
-    (searchParams.get("dir") as SortDir) || "desc"
+    disableUrlSync ? "desc" : ((searchParams.get("dir") as SortDir) || "desc")
   )
-  const [page, setPage] = useState(Number(searchParams.get("page")) || 1)
+  const [page, setPage] = useState(disableUrlSync ? 1 : (Number(searchParams.get("page")) || 1))
   const [compareIds, setCompareIds] = useState<string[]>([])
-  const [selectedSeason, setSelectedSeason] = useState<number | null>(null)
+  const [selectedSeason, setSelectedSeason] = useState<number | null>(
+    initialSeason ?? (disableUrlSync ? null : (searchParams.get("season") ? Number(searchParams.get("season")) : null))
+  )
   const searchRef = useRef<HTMLInputElement>(null)
 
-  // Build a set of player steamIds that participated in the selected season
+  // Build a set of player steamIds that participated in the selected season.
+  // If participantSteamIds is provided (pre-computed from actual match rosters),
+  // use it directly — this is more reliable than the name-matching heuristic
+  // because team names may not contain individual player names.
   const seasonPlayerIds = useMemo(() => {
     if (selectedSeason === null) return null
-    const ids = new Set<string>()
-    for (const m of matches) {
-      if (m.season_id === selectedSeason && !m.cancelled) {
-        // team strings in PUGs often contain player names
-        // but we can't reliably extract steam IDs from team strings
-        // Instead, we mark all matches from this season and show all players
-        // that have at least one match in this season
-        // Since we don't have per-match player rosters in the match list data,
-        // we'll filter by showing only players who exist AND have the season's matches
-      }
+
+    // Use pre-computed steam IDs when available (bypasses name-matching heuristic)
+    if (participantSteamIds && participantSteamIds.length > 0) {
+      return new Set(participantSteamIds)
     }
-    // Since we only have match-level data (not player-match associations) from the match list,
-    // the best we can do without additional API calls is filter matches by season and use
-    // team_string name matching as a heuristic
+
+    // Fallback: name-matching heuristic for PUG-style team strings
+    const ids = new Set<string>()
     const seasonMatches = matches.filter((m) => m.season_id === selectedSeason && !m.cancelled)
     for (const m of seasonMatches) {
       const t1Lower = m.team1_string.toLowerCase()
@@ -64,18 +85,20 @@ export function LeaderboardView({ players, avatars = {}, seasons = [], matches =
       }
     }
     return ids
-  }, [selectedSeason, matches, players])
+  }, [selectedSeason, matches, players, participantSteamIds])
 
   // Sync state to URL
-  const updateUrl = useCallback((q: string, sort: SortKey, dir: SortDir, p: number) => {
+  const updateUrl = useCallback((q: string, sort: SortKey, dir: SortDir, p: number, season: number | null) => {
+    if (disableUrlSync) return
     const params = new URLSearchParams()
     if (q.trim()) params.set("q", q.trim())
     if (sort !== "points") params.set("sort", sort)
     if (dir !== "desc") params.set("dir", dir)
     if (p > 1) params.set("page", String(p))
+    if (season !== null) params.set("season", String(season))
     const qs = params.toString()
     router.replace(`/leaderboard${qs ? `?${qs}` : ""}`, { scroll: false })
-  }, [router])
+  }, [router, disableUrlSync])
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -151,18 +174,18 @@ export function LeaderboardView({ players, avatars = {}, seasons = [], matches =
         e.preventDefault()
         const newPage = currentPage - 1
         setPage(newPage)
-        updateUrl(search, sortKey, sortDir, newPage)
+        updateUrl(search, sortKey, sortDir, newPage, selectedSeason)
       }
       if (e.key === "ArrowRight" && currentPage < totalPages) {
         e.preventDefault()
         const newPage = currentPage + 1
         setPage(newPage)
-        updateUrl(search, sortKey, sortDir, newPage)
+        updateUrl(search, sortKey, sortDir, newPage, selectedSeason)
       }
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [currentPage, totalPages, search, sortKey, sortDir, updateUrl])
+  }, [currentPage, totalPages, search, sortKey, sortDir, selectedSeason, updateUrl])
 
   function handleSortChange(key: SortKey) {
     let newDir: SortDir = "desc"
@@ -174,23 +197,24 @@ export function LeaderboardView({ players, avatars = {}, seasons = [], matches =
       setSortDir("desc")
     }
     setPage(1)
-    updateUrl(search, key, newDir, 1)
+    updateUrl(search, key, newDir, 1, selectedSeason)
   }
 
   function handleSearchChange(value: string) {
     setSearch(value)
     setPage(1)
-    updateUrl(value, sortKey, sortDir, 1)
+    updateUrl(value, sortKey, sortDir, 1, selectedSeason)
   }
 
   function handlePageChange(p: number) {
     setPage(p)
-    updateUrl(search, sortKey, sortDir, p)
+    updateUrl(search, sortKey, sortDir, p, selectedSeason)
   }
 
   function handleSeasonChange(seasonId: number | null) {
     setSelectedSeason(seasonId)
     setPage(1)
+    updateUrl(search, sortKey, sortDir, 1, seasonId)
   }
 
   function handleCompareToggle(steamId: string) {
@@ -258,7 +282,7 @@ export function LeaderboardView({ players, avatars = {}, seasons = [], matches =
         </div>
 
         {/* Season filter */}
-        {seasons.length > 0 && (
+        {seasons.length > 0 && !hideSeasonFilter && (
           <div className="flex flex-wrap items-center gap-2">
             <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
               <Calendar className="h-3.5 w-3.5" />

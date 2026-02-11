@@ -1,3 +1,4 @@
+import { memo } from "react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import type { Match } from "@/lib/types"
@@ -38,7 +39,7 @@ function MatchStatus({ match }: { match: Match }) {
   )
 }
 
-export function MatchCard({ match }: { match: Match }) {
+export const MatchCard = memo(function MatchCard({ match }: { match: Match }) {
   const team1Won = match.winner === 1
   const team2Won = match.winner === 2
   const isLive = match.winner === null && match.end_time === null && !match.cancelled && !match.forfeit
@@ -153,4 +154,4 @@ export function MatchCard({ match }: { match: Match }) {
       </div>
     </Link>
   )
-}
+})

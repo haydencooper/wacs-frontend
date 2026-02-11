@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Search, X, Trophy } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { SEARCH_DEBOUNCE_MS, MIN_SEARCH_LENGTH } from "@/lib/constants"
 
 interface SearchResult {
   steamId: string
@@ -18,13 +19,14 @@ export function PlayerSearch() {
   const [results, setResults] = useState<SearchResult[]>([])
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [selectedIndex, setSelectedIndex] = useState(-1)
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<AbortController | null>(null)
 
   const search = useCallback(async (q: string) => {
-    if (q.trim().length < 2) {
+    if (q.trim().length < MIN_SEARCH_LENGTH) {
       setResults([])
       setLoading(false)
       return
@@ -44,9 +46,11 @@ export function PlayerSearch() {
       const data = await res.json()
       setResults(data.players ?? [])
       setSelectedIndex(-1)
+      setError(null)
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
         setResults([])
+        setError("Search failed. Please try again.")
       }
     } finally {
       setLoading(false)
@@ -55,11 +59,11 @@ export function PlayerSearch() {
 
   // Debounced search
   useEffect(() => {
-    if (query.trim().length < 2) {
+    if (query.trim().length < MIN_SEARCH_LENGTH) {
       setResults([])
       return
     }
-    const timeout = setTimeout(() => search(query), 250)
+    const timeout = setTimeout(() => search(query), SEARCH_DEBOUNCE_MS)
     return () => clearTimeout(timeout)
   }, [query, search])
 
@@ -98,7 +102,7 @@ export function PlayerSearch() {
     }
   }
 
-  const showDropdown = open && (results.length > 0 || loading || query.trim().length >= 2)
+  const showDropdown = open && (results.length > 0 || loading || query.trim().length >= MIN_SEARCH_LENGTH)
 
   return (
     <div ref={containerRef} className="relative">
@@ -141,7 +145,12 @@ export function PlayerSearch() {
               Searching...
             </div>
           )}
-          {!loading && results.length === 0 && query.trim().length >= 2 && (
+          {!loading && error && (
+            <div className="px-3 py-4 text-center text-xs text-destructive">
+              {error}
+            </div>
+          )}
+          {!loading && !error && results.length === 0 && query.trim().length >= MIN_SEARCH_LENGTH && (
             <div className="px-3 py-4 text-center text-xs text-muted-foreground">
               No players found
             </div>

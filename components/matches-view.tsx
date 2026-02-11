@@ -5,8 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { MatchCard } from "@/components/match-card"
 import type { Match } from "@/lib/types"
 import { Search, ChevronLeft, ChevronRight, Filter } from "lucide-react"
+import { PAGE_SIZE } from "@/lib/constants"
 
-const ITEMS_PER_PAGE = 9
+const ITEMS_PER_PAGE = PAGE_SIZE
 const STAGGER_CLASSES = [
   "", "stagger-1", "stagger-2", "stagger-3", "stagger-4",
   "stagger-5", "stagger-6", "stagger-7", "stagger-8",
@@ -14,26 +15,33 @@ const STAGGER_CLASSES = [
 
 type StatusFilter = "all" | "completed" | "cancelled" | "live"
 
-export function MatchesView({ matches }: { matches: Match[] }) {
+interface MatchesViewProps {
+  matches: Match[]
+  /** When true, state is managed locally without syncing to URL search params. */
+  disableUrlSync?: boolean
+}
+
+export function MatchesView({ matches, disableUrlSync = false }: MatchesViewProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  const [search, setSearch] = useState(searchParams.get("q") ?? "")
+  const [search, setSearch] = useState(disableUrlSync ? "" : (searchParams.get("q") ?? ""))
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(
-    (searchParams.get("status") as StatusFilter) || "all"
+    disableUrlSync ? "all" : ((searchParams.get("status") as StatusFilter) || "all")
   )
-  const [page, setPage] = useState(Number(searchParams.get("page")) || 1)
+  const [page, setPage] = useState(disableUrlSync ? 1 : (Number(searchParams.get("page")) || 1))
   const searchRef = useRef<HTMLInputElement>(null)
 
   // Sync state to URL
   const updateUrl = useCallback((q: string, status: StatusFilter, p: number) => {
+    if (disableUrlSync) return
     const params = new URLSearchParams()
     if (q.trim()) params.set("q", q.trim())
     if (status !== "all") params.set("status", status)
     if (p > 1) params.set("page", String(p))
     const qs = params.toString()
     router.replace(`/matches${qs ? `?${qs}` : ""}`, { scroll: false })
-  }, [router])
+  }, [router, disableUrlSync])
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {

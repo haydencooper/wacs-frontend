@@ -3,6 +3,7 @@
 import { signIn, signOut, useSession } from "next-auth/react"
 import { LogIn, LogOut, User } from "lucide-react"
 import Link from "next/link"
+import Image from "next/image"
 
 export function SteamAuthButton() {
   const { data: session, status } = useSession()
@@ -14,10 +15,7 @@ export function SteamAuthButton() {
   }
 
   if (session?.user) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const steam = (session.user as any).steam as
-      | { steamid?: string; personaname?: string; avatarmedium?: string }
-      | undefined
+    const steam = session.user.steam
 
     return (
       <div className="flex items-center gap-1.5 sm:gap-2">
@@ -27,9 +25,11 @@ export function SteamAuthButton() {
             className="flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground sm:gap-2 sm:px-2"
           >
             {steam.avatarmedium ? (
-              <img
+              <Image
                 src={steam.avatarmedium}
                 alt={steam.personaname ?? "Avatar"}
+                width={24}
+                height={24}
                 className="h-6 w-6 rounded-full"
               />
             ) : (

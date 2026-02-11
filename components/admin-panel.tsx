@@ -22,12 +22,13 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { ADMIN_PAGE_SIZE, ADMIN_POLL_INTERVAL_MS } from "@/lib/constants"
 
 type Tab = "matches" | "servers"
 type StatusFilter = "all" | "live" | "completed" | "cancelled"
 
-const ITEMS_PER_PAGE = 15
-const POLL_INTERVAL = 20_000
+const ITEMS_PER_PAGE = ADMIN_PAGE_SIZE
+const POLL_INTERVAL = ADMIN_POLL_INTERVAL_MS
 
 function getMatchStatus(match: Match): { label: string; className: string } {
   if (match.cancelled) return { label: "Cancelled", className: "text-muted-foreground bg-secondary" }
@@ -103,8 +104,8 @@ function CreateMatchDialog({ servers, onClose, onSuccess }: { servers: Server[];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="mx-4 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-border bg-card p-6 shadow-xl">
-        <h3 className="mb-2 text-lg font-semibold text-foreground">Create Match</h3>
+      <div className="mx-4 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-border bg-card p-6 shadow-xl" role="dialog" aria-modal="true" aria-labelledby="create-match-title">
+        <h3 id="create-match-title" className="mb-2 text-lg font-semibold text-foreground">Create Match</h3>
         <p className="mb-6 text-sm text-muted-foreground">Set up a new match between two teams.</p>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="grid gap-4 md:grid-cols-2">

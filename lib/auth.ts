@@ -1,6 +1,7 @@
 import type { AuthOptions } from "next-auth"
 import Steam, { STEAM_PROVIDER_ID } from "next-auth-steam"
 import type { NextRequest } from "next/server"
+import type { SteamProfile } from "./steam"
 
 export function getAuthOptions(req?: NextRequest): AuthOptions {
   // Build a request-like object that always uses NEXTAUTH_URL as the origin
@@ -38,14 +39,13 @@ export function getAuthOptions(req?: NextRequest): AuthOptions {
     callbacks: {
       jwt({ token, account, profile }) {
         if (account?.provider === STEAM_PROVIDER_ID) {
-          token.steam = profile
+          token.steam = profile as unknown as SteamProfile
         }
         return token
       },
       session({ session, token }) {
         if ("steam" in token) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ;(session.user as any).steam = token.steam
+          session.user.steam = token.steam
         }
         return session
       },

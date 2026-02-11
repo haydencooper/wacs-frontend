@@ -1,13 +1,13 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import {
   Crosshair,
   Trophy,
   Swords,
   GitCompare,
-  Calendar,
   Menu,
   Shield,
   LogOut,
@@ -26,7 +26,7 @@ const navItems = [
   { href: "/", label: "Dashboard", icon: Crosshair },
   { href: "/matches", label: "Matches", icon: Swords },
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
-  { href: "/seasons", label: "Seasons", icon: Calendar },
+  { href: "/competitions", label: "Competitions", icon: Trophy },
   { href: "/compare", label: "Compare", icon: GitCompare },
   { href: "/stats", label: "Stats", icon: BarChart3 },
 ]
@@ -102,6 +102,7 @@ function MobileDrawer({
           open ? "translate-x-0" : "translate-x-full"
         )}
         role="dialog"
+        aria-modal="true"
         aria-label="Navigation menu"
       >
         {/* Drawer header */}
@@ -238,10 +239,7 @@ function UserMenu() {
     )
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const steam = (session.user as any).steam as
-    | { steamid?: string; personaname?: string; avatarmedium?: string }
-    | undefined
+  const steam = session.user.steam
 
   return (
     <div ref={ref} className="relative">
@@ -252,11 +250,14 @@ function UserMenu() {
           open ? "ring-2 ring-primary" : "hover:ring-2 hover:ring-border"
         )}
         aria-label="User menu"
+        aria-expanded={open}
       >
         {steam?.avatarmedium ? (
-          <img
+          <Image
             src={steam.avatarmedium}
             alt={steam.personaname ?? "Avatar"}
+            width={32}
+            height={32}
             className="h-8 w-8 rounded-full"
           />
         ) : (

@@ -1,64 +1,19 @@
-import { readFileSync } from "fs"
-import { join } from "path"
 import type { PlayerStat, Match, MapStat, Server, Season } from "./types"
 
 // ── Config ───────────────────────────────────────────────
 
-interface AppConfig {
-  admin_steam_ids?: string[]
-  discord: {
-    token: string
-    guild_id: string
-    channel_id: string
-  }
-  game: {
-    maps: {
-      competitive: Record<string, string>
-      wingman: Record<string, string>
-    }
-  }
-  web: {
-    base_url: string
-    api_key: string
-  }
-  db: {
-    user: string
-    password: string
-    database: string
-    host: string
-    port: string
-  }
-}
-
-function loadConfig(): AppConfig | null {
-  try {
-    const configPath = join(process.cwd(), "config.json")
-    const raw = readFileSync(configPath, "utf-8")
-    return JSON.parse(raw) as AppConfig
-  } catch {
-    return null
-  }
-}
-
-let _config: AppConfig | null | undefined
-function getConfig(): AppConfig | null {
-  if (_config === undefined) {
-    _config = loadConfig()
-  }
-  return _config
-}
-
 function getBaseUrl(): string {
-  const raw = getConfig()?.web.base_url ?? ""
+  const raw = process.env.G5API_BASE_URL ?? ""
   return raw.replace(/\/+$/, "")
 }
 
 function getApiKey(): string {
-  return getConfig()?.web.api_key ?? ""
+  return process.env.G5API_KEY ?? ""
 }
 
 export function getAdminSteamIds(): string[] {
-  return getConfig()?.admin_steam_ids ?? []
+  const raw = process.env.ADMIN_STEAM_IDS ?? ""
+  return raw.split(",").map((s) => s.trim()).filter(Boolean)
 }
 
 export function mapG5Error(error: unknown): { message: string; status: number } {
@@ -92,7 +47,7 @@ export async function g5Fetch<T>(
   const apiKey = getApiKey()
 
   if (!baseUrl) {
-    throw new Error("G5API base_url is not configured in config.json")
+    throw new Error("G5API_BASE_URL environment variable is not set")
   }
 
   const url = `${baseUrl}${path}`
@@ -135,7 +90,7 @@ export async function g5Fetch<T>(
   if (res.status >= 300 && res.status < 400) {
     const location = res.headers.get("location") ?? ""
     throw new Error(
-      `G5API redirected (${res.status}) for ${path} -> ${location}. Check that api_key in config.json is correct.`
+      `G5API redirected (${res.status}) for ${path} -> ${location}. Check that G5API_KEY env var is correct.`
     )
   }
 
@@ -166,7 +121,7 @@ export async function g5Fetch<T>(
 // G5API wraps all responses in an object like { matches: [...] } or { match: {...} }
 // These helpers extract the actual data.
 
-function unwrapArray(data: unknown, ...keys: string[]): Record<string, unknown>[] {
+export function unwrapArray(data: unknown, ...keys: string[]): Record<string, unknown>[] {
   if (!data || typeof data !== "object") return []
   if (Array.isArray(data)) return data as Record<string, unknown>[]
   const obj = data as Record<string, unknown>
@@ -177,7 +132,7 @@ function unwrapArray(data: unknown, ...keys: string[]): Record<string, unknown>[
   return []
 }
 
-function unwrapObject(data: unknown, ...keys: string[]): Record<string, unknown> | null {
+export function unwrapObject(data: unknown, ...keys: string[]): Record<string, unknown> | null {
   if (!data || typeof data !== "object") return null
   if (Array.isArray(data)) return (data[0] as Record<string, unknown>) ?? null
   const obj = data as Record<string, unknown>
@@ -193,7 +148,7 @@ function unwrapObject(data: unknown, ...keys: string[]): Record<string, unknown>
 
 // ── Rating Calculation (HLTV Rating 1.0) ─────────────────
 // Mirrors G5API's Utils.getRating()
-function computeRating(
+export function computeRating(
   kills: number,
   roundsPlayed: number,
   deaths: number,
@@ -213,7 +168,7 @@ function computeRating(
 
 // ── Normalizers ──────────────────────────────────────────
 
-function normalizePlayer(raw: Record<string, unknown>): PlayerStat {
+export function normalizePlayer(raw: Record<string, unknown>): PlayerStat {
   const kills = Number(raw.kills ?? 0)
   const deaths = Number(raw.deaths ?? 0)
   const assists = Number(raw.assists ?? 0)
@@ -264,52 +219,64 @@ function normalizePlayer(raw: Record<string, unknown>): PlayerStat {
   }
 }
 
-function normalizeMatch(raw: Record<string, unknown>): Match {
+/**
+ * Normalize a G5API winner value to 1 (team1) or 2 (team2), or null if unknown.
+ *
+ * G5API stores winner as a team_id (e.g., 47, 48) rather than 1/2.
+ * For standard matches, we map via team1_id/team2_id.
+ * For PUG matches (team IDs may be 0), we fall back to comparing scores.
+ *
+ * Priority:
+ *   1. Direct team_id match against team1_id/team2_id
+ *   2. Already normalized (rawWinner is 1 or 2)
+ *   3. Score comparison fallback
+ */
+export function deriveWinner(
+  rawWinner: number | null,
+  team1Id: number,
+  team2Id: number,
+  score1: number,
+  score2: number,
+): number | null {
+  if (rawWinner === null || rawWinner === 0) {
+    // No winner declared — try score fallback
+    if (score1 > score2) return 1
+    if (score2 > score1) return 2
+    return null
+  }
+  if (rawWinner === team1Id && team1Id !== 0) return 1
+  if (rawWinner === team2Id && team2Id !== 0) return 2
+  if (rawWinner === 1 || rawWinner === 2) return rawWinner
+  // Unresolvable team_id — score fallback
+  if (score1 > score2) return 1
+  if (score2 > score1) return 2
+  return null
+}
+
+export function normalizeMatch(raw: Record<string, unknown>): Match {
   const team1Id = Number(raw.team1_id ?? 0)
   const team2Id = Number(raw.team2_id ?? 0)
   const rawWinner = raw.winner !== null && raw.winner !== undefined
     ? Number(raw.winner)
     : null
 
-  // G5API stores winner as team_id. Normalize to 1 (team1) or 2 (team2).
-  let winner: number | null = null
-  if (rawWinner !== null && rawWinner !== 0) {
-    if (rawWinner === team1Id && team1Id !== 0) {
-      winner = 1
-    } else if (rawWinner === team2Id && team2Id !== 0) {
-      winner = 2
-    } else if (rawWinner === 1 || rawWinner === 2) {
-      // Already normalized
-      winner = rawWinner
-    } else {
-      // PUG match: rawWinner is a team_id we can't map. 
-      // Derive winner from mapscore/score as fallback.
-      const team1MapScore = raw.team1_mapscore != null ? Number(raw.team1_mapscore) : null
-      const team2MapScore = raw.team2_mapscore != null ? Number(raw.team2_mapscore) : null
-      const s1 = team1MapScore ?? Number(raw.team1_score ?? 0)
-      const s2 = team2MapScore ?? Number(raw.team2_score ?? 0)
-      if (s1 > s2) winner = 1
-      else if (s2 > s1) winner = 2
-      // If scores are equal, we can't determine the winner
-    }
-  }
-
   // G5API list endpoint JOINs map_stats and returns team1_mapscore/team2_mapscore
   // (round-level scores). For BO1 the series score (team1_score/team2_score) is
   // just 0 or 1, so we prefer the mapscore when available.
   const team1Mapscore = raw.team1_mapscore != null ? Number(raw.team1_mapscore) : null
   const team2Mapscore = raw.team2_mapscore != null ? Number(raw.team2_mapscore) : null
+  const score1 = team1Mapscore ?? Number(raw.team1_score ?? 0)
+  const score2 = team2Mapscore ?? Number(raw.team2_score ?? 0)
 
-  // If end_time is set but winner is not, derive winner from scores.
+  let winner = deriveWinner(rawWinner, team1Id, team2Id, score1, score2)
+
+  // If end_time is set but winner is still null, try score-based derivation.
   // G5API may return null, "", or "0000-00-00 00:00:00" for unfinished matches.
   const rawEndTime = raw.end_time ? String(raw.end_time) : null
   const endTime = rawEndTime && rawEndTime !== "0000-00-00 00:00:00" ? rawEndTime : null
   if (winner === null && endTime !== null && !Boolean(raw.cancelled ?? false) && !Boolean(raw.forfeit ?? false)) {
-    // Try to derive from mapscore first, then series score
-    const s1 = team1Mapscore ?? Number(raw.team1_score ?? 0)
-    const s2 = team2Mapscore ?? Number(raw.team2_score ?? 0)
-    if (s1 > s2) winner = 1
-    else if (s2 > s1) winner = 2
+    if (score1 > score2) winner = 1
+    else if (score2 > score1) winner = 2
   }
 
   return {
@@ -334,27 +301,18 @@ function normalizeMatch(raw: Record<string, unknown>): Match {
   }
 }
 
-function normalizeMapStat(
+export function normalizeMapStat(
   raw: Record<string, unknown>,
   match?: Match | null
 ): MapStat {
-  const rawWinner = raw.winner !== null && raw.winner !== undefined && raw.winner !== 0
+  const rawWinner = raw.winner !== null && raw.winner !== undefined
     ? Number(raw.winner)
     : null
-
-  // Normalize winner from team_id to 1/2 like we do for matches
-  let winner: number | null = null
-  if (rawWinner !== null && match) {
-    if (rawWinner === match.team1_id) {
-      winner = 1
-    } else if (rawWinner === match.team2_id) {
-      winner = 2
-    } else {
-      winner = rawWinner
-    }
-  } else {
-    winner = rawWinner
-  }
+  const team1Id = match?.team1_id ?? 0
+  const team2Id = match?.team2_id ?? 0
+  const score1 = Number(raw.team1_score ?? 0)
+  const score2 = Number(raw.team2_score ?? 0)
+  const winner = deriveWinner(rawWinner, team1Id, team2Id, score1, score2)
 
   return {
     id: Number(raw.id ?? 0),
@@ -369,7 +327,7 @@ function normalizeMapStat(
   }
 }
 
-function normalizeServer(raw: Record<string, unknown>): Server {
+export function normalizeServer(raw: Record<string, unknown>): Server {
   return {
     id: Number(raw.id ?? 0),
     ip_string: String(raw.ip_string ?? ""),
@@ -385,248 +343,239 @@ function normalizeServer(raw: Record<string, unknown>): Server {
 // ── API Helpers ──────────────────────────────────────────
 
 export async function fetchLeaderboard(): Promise<PlayerStat[]> {
-  try {
-    const data = await g5Fetch<unknown>("/api/leaderboard/players/pug", {
-      revalidate: 60,
-    })
-    const raw = unwrapArray(data, "leaderboard")
-    return raw.map(normalizePlayer)
-  } catch (e) {
-    console.error("fetchLeaderboard error:", e)
-    return []
-  }
+  const data = await g5Fetch<unknown>("/api/leaderboard/players/pug", {
+    revalidate: 60,
+  })
+  const raw = unwrapArray(data, "leaderboard")
+  return raw.map(normalizePlayer)
 }
 
 export async function fetchPlayerStats(
   steamId: string
 ): Promise<PlayerStat | null> {
-  try {
-    const data = await g5Fetch<unknown>(`/api/playerstats/${steamId}/pug`, {
-      revalidate: 60,
-    })
-    if (!data) return null
-    // G5API responds: { playerstats: PlayerObject } (single object, not array)
-    const raw = unwrapObject(data, "playerstats", "playerStats")
-    if (!raw) return null
-    return normalizePlayer(raw)
-  } catch (e) {
-    console.error("fetchPlayerStats error:", e)
-    return null
-  }
+  const data = await g5Fetch<unknown>(`/api/playerstats/${steamId}/pug`, {
+    revalidate: 60,
+  })
+  if (!data) return null
+  // G5API responds: { playerstats: PlayerObject } (single object, not array)
+  const raw = unwrapObject(data, "playerstats", "playerStats")
+  if (!raw) return null
+  return normalizePlayer(raw)
 }
 
 export async function fetchMatches(): Promise<Match[]> {
-  try {
-    const data = await g5Fetch<unknown>("/api/matches", { revalidate: 30 })
-    const raw = unwrapArray(data, "matches")
-    return raw.map(normalizeMatch)
-  } catch (e) {
-    console.error("fetchMatches error:", e)
-    return []
-  }
+  const data = await g5Fetch<unknown>("/api/matches", { revalidate: 30 })
+  const raw = unwrapArray(data, "matches")
+  return raw.map(normalizeMatch)
 }
 
 export async function fetchMatch(matchId: string): Promise<Match | null> {
-  try {
-    const data = await g5Fetch<unknown>(`/api/matches/${matchId}`, {
-      revalidate: 30,
-    })
-    if (!data) return null
-    // G5API responds: { match: MatchData } (single object)
-    const raw = unwrapObject(data, "match")
-    if (!raw) return null
-    return normalizeMatch(raw)
-  } catch (e) {
-    console.error("fetchMatch error:", e)
-    return null
-  }
+  const data = await g5Fetch<unknown>(`/api/matches/${matchId}`, {
+    revalidate: 30,
+  })
+  if (!data) return null
+  // G5API responds: { match: MatchData } (single object)
+  const raw = unwrapObject(data, "match")
+  if (!raw) return null
+  return normalizeMatch(raw)
 }
 
 export async function fetchMapStats(
   matchId: string,
   match?: Match | null
 ): Promise<MapStat[]> {
-  try {
-    const data = await g5Fetch<unknown>(`/api/mapstats/${matchId}`, {
-      revalidate: 60,
-    })
-    // G5API responds: { mapstats: MapStatsData[] }
-    const raw = unwrapArray(data, "mapstats")
-    return raw.map((r) => normalizeMapStat(r, match))
-  } catch (e) {
-    console.error("fetchMapStats error:", e)
-    return []
-  }
+  const data = await g5Fetch<unknown>(`/api/mapstats/${matchId}`, {
+    revalidate: 60,
+  })
+  // G5API responds: { mapstats: MapStatsData[] }
+  const raw = unwrapArray(data, "mapstats")
+  return raw.map((r) => normalizeMapStat(r, match))
 }
 
 export async function fetchMatchPlayerStats(
   matchId: string,
   match?: Match | null
 ): Promise<{ team1: PlayerStat[]; team2: PlayerStat[] }> {
-  try {
-    const data = await g5Fetch<unknown>(
-      `/api/playerstats/match/${matchId}`,
-      { revalidate: 60 }
-    )
-    // G5API responds: { playerstats: PlayerStats[] } — raw per-map rows
-    const raw = unwrapArray(data, "playerstats", "playerStats")
-    if (raw.length === 0) return { team1: [], team2: [] }
+  const data = await g5Fetch<unknown>(
+    `/api/playerstats/match/${matchId}`,
+    { revalidate: 60 }
+  )
+  // G5API responds: { playerstats: PlayerStats[] } — raw per-map rows
+  const raw = unwrapArray(data, "playerstats", "playerStats")
+  if (raw.length === 0) return { team1: [], team2: [] }
 
-    // The raw data contains per-map rows. We need to aggregate per player
-    // and split by team. Each row has team_id which corresponds to
-    // match.team1_id or match.team2_id.
-    const team1Id = match?.team1_id ?? 0
-    const team2Id = match?.team2_id ?? 0
+  // The raw data contains per-map rows. We need to aggregate per player
+  // and split by team. Each row has team_id which corresponds to
+  // match.team1_id or match.team2_id.
+  const team1Id = match?.team1_id ?? 0
+  const team2Id = match?.team2_id ?? 0
 
-    // Aggregate stats by steam_id
-    const playerMap = new Map<string, { raw: Record<string, unknown>[], teamId: number }>()
-    for (const row of raw) {
-      const steamId = String(row.steam_id ?? row.steamId ?? "")
-      const teamId = Number(row.team_id ?? 0)
-      if (!steamId) continue
-      const existing = playerMap.get(steamId)
-      if (existing) {
-        existing.raw.push(row)
-      } else {
-        playerMap.set(steamId, { raw: [row], teamId })
-      }
+  // Aggregate stats by steam_id
+  const playerMap = new Map<string, { raw: Record<string, unknown>[], teamId: number }>()
+  for (const row of raw) {
+    const steamId = String(row.steam_id ?? row.steamId ?? "")
+    const teamId = Number(row.team_id ?? 0)
+    if (!steamId) continue
+    const existing = playerMap.get(steamId)
+    if (existing) {
+      existing.raw.push(row)
+    } else {
+      playerMap.set(steamId, { raw: [row], teamId })
     }
-
-    const team1: PlayerStat[] = []
-    const team2: PlayerStat[] = []
-
-    for (const [steamId, { raw: rows, teamId }] of playerMap) {
-      // Sum numeric fields across maps (for BO1 there's only 1 row per player)
-      const aggregated: Record<string, unknown> = {
-        steam_id: steamId,
-        steamId: steamId,
-        name: String(rows[0].name ?? "Unknown"),
-        kills: rows.reduce((s, r) => s + Number(r.kills ?? 0), 0),
-        deaths: rows.reduce((s, r) => s + Number(r.deaths ?? 0), 0),
-        assists: rows.reduce((s, r) => s + Number(r.assists ?? 0), 0),
-        roundsplayed: rows.reduce((s, r) => s + Number(r.roundsplayed ?? r.rounds_played ?? 0), 0),
-        k1: rows.reduce((s, r) => s + Number(r.k1 ?? 0), 0),
-        k2: rows.reduce((s, r) => s + Number(r.k2 ?? 0), 0),
-        k3: rows.reduce((s, r) => s + Number(r.k3 ?? 0), 0),
-        k4: rows.reduce((s, r) => s + Number(r.k4 ?? 0), 0),
-        k5: rows.reduce((s, r) => s + Number(r.k5 ?? 0), 0),
-        v1: rows.reduce((s, r) => s + Number(r.v1 ?? 0), 0),
-        v2: rows.reduce((s, r) => s + Number(r.v2 ?? 0), 0),
-        v3: rows.reduce((s, r) => s + Number(r.v3 ?? 0), 0),
-        v4: rows.reduce((s, r) => s + Number(r.v4 ?? 0), 0),
-        v5: rows.reduce((s, r) => s + Number(r.v5 ?? 0), 0),
-        headshot_kills: rows.reduce((s, r) => s + Number(r.headshot_kills ?? r.hsk ?? 0), 0),
-        hsp: 0,
-        // average_rating intentionally 0 so normalizePlayer computes it via roundsplayed
-        average_rating: 0,
-        wins: 0,
-        total_maps: rows.length,
-        points: 0,
-      }
-
-      const player = normalizePlayer(aggregated)
-
-      // Assign to team based on team_id matching the match's team IDs
-      if (team1Id && teamId === team1Id) {
-        team1.push(player)
-      } else if (team2Id && teamId === team2Id) {
-        team2.push(player)
-      } else {
-        // Fallback: assign alternately
-        if (team1.length <= team2.length) {
-          team1.push(player)
-        } else {
-          team2.push(player)
-        }
-      }
-    }
-
-    // Sort each team by kills descending
-    team1.sort((a, b) => b.kills - a.kills)
-    team2.sort((a, b) => b.kills - a.kills)
-
-    return { team1, team2 }
-  } catch (e) {
-    console.error("fetchMatchPlayerStats error:", e)
-    return { team1: [], team2: [] }
   }
+
+  const team1: PlayerStat[] = []
+  const team2: PlayerStat[] = []
+
+  for (const [steamId, { raw: rows, teamId }] of playerMap) {
+    // Sum numeric fields across maps (for BO1 there's only 1 row per player)
+    const aggregated: Record<string, unknown> = {
+      steam_id: steamId,
+      steamId: steamId,
+      name: String(rows[0].name ?? "Unknown"),
+      kills: rows.reduce((s, r) => s + Number(r.kills ?? 0), 0),
+      deaths: rows.reduce((s, r) => s + Number(r.deaths ?? 0), 0),
+      assists: rows.reduce((s, r) => s + Number(r.assists ?? 0), 0),
+      roundsplayed: rows.reduce((s, r) => s + Number(r.roundsplayed ?? r.rounds_played ?? 0), 0),
+      k1: rows.reduce((s, r) => s + Number(r.k1 ?? 0), 0),
+      k2: rows.reduce((s, r) => s + Number(r.k2 ?? 0), 0),
+      k3: rows.reduce((s, r) => s + Number(r.k3 ?? 0), 0),
+      k4: rows.reduce((s, r) => s + Number(r.k4 ?? 0), 0),
+      k5: rows.reduce((s, r) => s + Number(r.k5 ?? 0), 0),
+      v1: rows.reduce((s, r) => s + Number(r.v1 ?? 0), 0),
+      v2: rows.reduce((s, r) => s + Number(r.v2 ?? 0), 0),
+      v3: rows.reduce((s, r) => s + Number(r.v3 ?? 0), 0),
+      v4: rows.reduce((s, r) => s + Number(r.v4 ?? 0), 0),
+      v5: rows.reduce((s, r) => s + Number(r.v5 ?? 0), 0),
+      headshot_kills: rows.reduce((s, r) => s + Number(r.headshot_kills ?? r.hsk ?? 0), 0),
+      hsp: 0,
+      // average_rating intentionally 0 so normalizePlayer computes it via roundsplayed
+      average_rating: 0,
+      wins: 0,
+      total_maps: rows.length,
+      points: 0,
+    }
+
+    const player = normalizePlayer(aggregated)
+
+    // Assign to team based on team_id matching the match's team IDs
+    if (team1Id && teamId === team1Id) {
+      team1.push(player)
+    } else if (team2Id && teamId === team2Id) {
+      team2.push(player)
+    } else {
+      console.warn(
+        `[fetchMatchPlayerStats] Could not match team_id ${teamId} to team1=${team1Id} or team2=${team2Id} for player ${steamId} in match ${matchId}. Using round-robin fallback.`
+      )
+      if (team1.length <= team2.length) {
+        team1.push(player)
+      } else {
+        team2.push(player)
+      }
+    }
+  }
+
+  // Sort each team by kills descending
+  team1.sort((a, b) => b.kills - a.kills)
+  team2.sort((a, b) => b.kills - a.kills)
+
+  return { team1, team2 }
+}
+
+/**
+ * Fetch the set of unique steam IDs that participated in any of the given matches.
+ * Makes one API call per match to `/api/playerstats/match/:id` and collects
+ * all steam_id values. Failures for individual matches are silently skipped.
+ */
+export async function fetchSeasonPlayerSteamIds(
+  matches: Match[],
+): Promise<Set<string>> {
+  const ids = new Set<string>()
+  const results = await Promise.allSettled(
+    matches.map(async (m) => {
+      const data = await g5Fetch<unknown>(
+        `/api/playerstats/match/${m.id}`,
+        { revalidate: 300 },
+      )
+      const rows = unwrapArray(data, "playerstats", "playerStats")
+      for (const row of rows) {
+        const steamId = String(row.steam_id ?? row.steamId ?? "")
+        if (steamId) ids.add(steamId)
+      }
+    }),
+  )
+  // Just return whatever we collected; individual failures are ignored
+  return ids
 }
 
 export async function fetchPlayerRecentMatches(
   steamId: string
 ): Promise<Match[]> {
+  // Strategy 1: Try G5API /api/users/:steamId/recent first.
+  // This only works for players with a `user` row, but it's fast and accurate.
   try {
-    // Strategy 1: Try G5API /api/users/:steamId/recent first.
-    // This only works for players with a `user` row, but it's fast and accurate.
-    try {
-      const data = await g5Fetch<unknown>(`/api/users/${steamId}/recent`, {
-        revalidate: 60,
-      })
-      const raw = unwrapArray(data, "matches")
-      if (raw.length > 0) {
-        // Deduplicate by match ID (users/recent may return per-map rows)
-        const uniqueIds = [...new Set(raw.map((r) => String(r.id ?? r.match_id ?? "")))]
-          .filter(Boolean)
-          .slice(0, 10)
-        const fullMatches = await Promise.all(
-          uniqueIds.map((id) => fetchMatch(id))
-        )
-        const result = fullMatches.filter((m): m is Match => m !== null)
-        // Further deduplicate just in case
-        const seen = new Set<number>()
-        const deduped = result.filter((m) => {
-          if (seen.has(m.id)) return false
-          seen.add(m.id)
-          return true
-        })
-        if (deduped.length > 0) return deduped.slice(0, 5)
-      }
-    } catch {
-      // G5API may 404 or error for unknown users — fall through to strategy 2
-    }
-
-    // Strategy 2: Fetch all matches and scan for player participation.
-    // We check ALL non-cancelled matches (sorted newest first) in batches.
-    const allMatches = await fetchMatches()
-    // strategy 2: scan all matches
-    if (allMatches.length === 0) return []
-
-    const candidates = allMatches
-      .filter((m) => !m.cancelled)
-      .sort((a, b) => b.id - a.id)
-
-    const found: Match[] = []
-    const BATCH_SIZE = 10
-    for (let i = 0; i < candidates.length && found.length < 5; i += BATCH_SIZE) {
-      const batch = candidates.slice(i, i + BATCH_SIZE)
-      const results = await Promise.all(
-        batch.map(async (match) => {
-          try {
-            const data = await g5Fetch<unknown>(
-              `/api/playerstats/match/${match.id}`,
-              { revalidate: 120 }
-            )
-            const stats = unwrapArray(data, "playerstats", "playerStats")
-            const participated = stats.some(
-              (s) => String(s.steam_id ?? s.steamId ?? "") === steamId
-            )
-            return participated ? match : null
-          } catch {
-            return null
-          }
-        })
+    const data = await g5Fetch<unknown>(`/api/users/${steamId}/recent`, {
+      revalidate: 60,
+    })
+    const raw = unwrapArray(data, "matches")
+    if (raw.length > 0) {
+      // Deduplicate by match ID (users/recent may return per-map rows)
+      const uniqueIds = [...new Set(raw.map((r) => String(r.id ?? r.match_id ?? "")))]
+        .filter(Boolean)
+        .slice(0, 10)
+      const fullMatches = await Promise.all(
+        uniqueIds.map((id) => fetchMatch(id))
       )
-      for (const m of results) {
-        if (m && found.length < 5) found.push(m)
-      }
+      const result = fullMatches.filter((m): m is Match => m !== null)
+      // Further deduplicate just in case
+      const seen = new Set<number>()
+      const deduped = result.filter((m) => {
+        if (seen.has(m.id)) return false
+        seen.add(m.id)
+        return true
+      })
+      if (deduped.length > 0) return deduped.slice(0, 5)
     }
-
-    // found matches via strategy 2
-    return found
-  } catch (e) {
-    console.error("fetchPlayerRecentMatches error:", e)
-    return []
+  } catch {
+    // G5API may 404 or error for unknown users — fall through to strategy 2
   }
+
+  // Strategy 2: Fetch all matches and scan for player participation.
+  // We check ALL non-cancelled matches (sorted newest first) in batches.
+  const allMatches = await fetchMatches()
+  if (allMatches.length === 0) return []
+
+  const candidates = allMatches
+    .filter((m) => !m.cancelled)
+    .sort((a, b) => b.id - a.id)
+
+  const found: Match[] = []
+  const BATCH_SIZE = 10
+  for (let i = 0; i < candidates.length && found.length < 5; i += BATCH_SIZE) {
+    const batch = candidates.slice(i, i + BATCH_SIZE)
+    const results = await Promise.all(
+      batch.map(async (match) => {
+        try {
+          const data = await g5Fetch<unknown>(
+            `/api/playerstats/match/${match.id}`,
+            { revalidate: 120 }
+          )
+          const stats = unwrapArray(data, "playerstats", "playerStats")
+          const participated = stats.some(
+            (s) => String(s.steam_id ?? s.steamId ?? "") === steamId
+          )
+          return participated ? match : null
+        } catch {
+          return null
+        }
+      })
+    )
+    for (const m of results) {
+      if (m && found.length < 5) found.push(m)
+    }
+  }
+
+  return found
 }
 
 /**
@@ -718,33 +667,22 @@ export async function fetchBulkMapStats(
 }
 
 export async function fetchSeasons(): Promise<Season[]> {
-  try {
-    const data = await g5Fetch<unknown>("/api/seasons", { revalidate: 300 })
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const raw = unwrapArray(data, "seasons")
-    return raw.map((s: Record<string, unknown>) => ({
-      id: Number(s.id),
-      name: String(s.name ?? `Season ${s.id}`),
-      start_date: String(s.start_date ?? ""),
-      end_date: s.end_date ? String(s.end_date) : null,
-    }))
-  } catch (e) {
-    console.error("fetchSeasons error:", e)
-    return []
-  }
+  const data = await g5Fetch<unknown>("/api/seasons", { revalidate: 300 })
+  const raw = unwrapArray(data, "seasons")
+  return raw.map((s: Record<string, unknown>) => ({
+    id: Number(s.id),
+    name: String(s.name ?? `Season ${s.id}`),
+    start_date: String(s.start_date ?? ""),
+    end_date: s.end_date ? String(s.end_date) : null,
+  }))
 }
 
 export async function fetchServers(): Promise<Server[]> {
-  try {
-    // Use /api/servers/myservers for authenticated server list
-    const data = await g5Fetch<unknown>("/api/servers/myservers", {
-      revalidate: 15,
-    })
-    // G5API responds: { servers: ServerData[] }
-    const raw = unwrapArray(data, "servers")
-    return raw.map(normalizeServer)
-  } catch (e) {
-    console.error("fetchServers error:", e)
-    return []
-  }
+  // Use /api/servers/myservers for authenticated server list
+  const data = await g5Fetch<unknown>("/api/servers/myservers", {
+    revalidate: 15,
+  })
+  // G5API responds: { servers: ServerData[] }
+  const raw = unwrapArray(data, "servers")
+  return raw.map(normalizeServer)
 }

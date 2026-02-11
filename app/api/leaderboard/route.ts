@@ -1,11 +1,17 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { g5Fetch, mapG5Error } from "@/lib/api"
 import { normalizePlayer, unwrapArray } from "@/lib/normalizers"
+import { rateLimit } from "@/lib/rate-limit"
 import type { PlayerStat } from "@/lib/types"
 
 export const dynamic = "force-dynamic"
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const ip = req.headers.get("x-forwarded-for") ?? "unknown"
+  const { allowed } = rateLimit(ip)
+  if (!allowed) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 })
+  }
   try {
     const data = await g5Fetch<unknown>("/api/leaderboard/players/pug")
 

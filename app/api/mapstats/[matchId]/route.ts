@@ -20,7 +20,7 @@ export async function GET(
   try {
     const data = await g5Fetch<unknown>(`/api/mapstats/${matchId}`)
 
-    const mapStats = unwrapArray(data, "mapstats", "map_stats").map(normalizeMapStat)
+    const mapStats = unwrapArray(data, "mapstats", "map_stats").map((r) => normalizeMapStat(r))
 
     return NextResponse.json(mapStats)
   } catch (error) {

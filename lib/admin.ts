@@ -4,11 +4,8 @@ import { getAuthOptions } from "@/lib/auth"
 import { getAdminSteamIds } from "@/lib/api"
 
 function getSteamIdFromSession(session: unknown): string | null {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const steam = (session as any)?.user?.steam as
-    | { steamid?: string }
-    | undefined
-  return steam?.steamid ?? null
+  const s = session as { user?: { steam?: { steamid?: string } } } | null
+  return s?.user?.steam?.steamid ?? null
 }
 
 export function isAdmin(session: unknown): boolean {
