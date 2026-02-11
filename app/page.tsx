@@ -90,7 +90,7 @@ export default async function DashboardPage() {
     let bestRating = 0
     let bestSteamId: string | null = null
     for (const [steamId, agg] of weeklyAgg) {
-      if (agg.maps < 4 || agg.rounds === 0) continue
+      if (agg.maps < 7 || agg.rounds === 0) continue
       const killRating = agg.kills / agg.rounds / 0.679
       const survivalRating = (agg.rounds - agg.deaths) / agg.rounds / 0.317
       const multiKillBonus =
