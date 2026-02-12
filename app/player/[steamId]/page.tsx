@@ -1,9 +1,13 @@
-import { fetchPlayerStats, fetchLeaderboard, fetchPlayerRecentMatches, fetchPlayerTeamInMatches, fetchSeasons, fetchMatches, fetchMatchPlayerStats } from "@/lib/api"
+import { fetchPlayerStats, fetchLeaderboard, fetchPlayerRecentMatches, fetchPlayerTeamInMatches, fetchSeasons, fetchMatches, fetchMatchPlayerStats, fetchMapStats, g5Fetch, unwrapArray, computeRating } from "@/lib/api"
 import { fetchSteamAvatar } from "@/lib/steam"
 import { deriveCompetitionWinner, getCompetitionStatus } from "@/lib/competitions"
 import { MatchCardWithOutcome } from "@/components/match-card-with-outcome"
 import { SteamAvatar } from "@/components/steam-avatar"
 import { PlayerBadges } from "@/components/player-badges"
+import { RecentForm } from "@/components/recent-form"
+import { computeRecentForm } from "@/lib/recent-form"
+import { PlayerMapStats, type MapPerformance } from "@/components/player-map-stats"
+import { RatingSparkline, type RatingPoint } from "@/components/rating-sparkline"
 import { cn } from "@/lib/utils"
 import {
   Crosshair,
@@ -114,6 +118,13 @@ export default async function PlayerProfilePage({
     playerTeamsPromise,
   ])
 
+  // Compute recent form (W/L/D/C) from recent matches
+  const recentForm = computeRecentForm(
+    recentMatches.sort((a, b) => b.id - a.id),
+    playerTeams,
+    5
+  )
+
   const rank = leaderboard.findIndex((p) => p.steamId === steamId) + 1
 
   // Compute competition wins for this player
@@ -156,6 +167,89 @@ export default async function PlayerProfilePage({
     )
   }
   await Promise.allSettled(compChecks)
+
+  // Compute per-map stats and per-match rating from recent matches
+  const mapPerf = new Map<string, { played: number; wins: number; kills: number; deaths: number; rounds: number; k1: number; k2: number; k3: number; k4: number; k5: number }>()
+  const ratingPoints: RatingPoint[] = []
+
+  // Fetch map stats and player stats for each recent match
+  const mapStatsPromises = recentMatches.map(async (match) => {
+    try {
+      const [maps, pData] = await Promise.all([
+        fetchMapStats(String(match.id), match),
+        g5Fetch<unknown>(`/api/playerstats/match/${match.id}`, { revalidate: 120 }),
+      ])
+      const pRows = unwrapArray(pData, "playerstats", "playerStats")
+      const playerRows = pRows.filter(
+        (r) => String(r.steam_id ?? r.steamId ?? "") === steamId
+      )
+      const pTeam = playerTeams.get(match.id)
+
+      for (const map of maps) {
+        // Find the player's stats for this specific map (by map_number)
+        const pRow = playerRows.find(
+          (r) => Number(r.map_id ?? r.map_number ?? 0) === map.map_number
+        ) ?? playerRows[0] // fallback for BO1 where there's only one row
+
+        if (!pRow) continue
+
+        const existing = mapPerf.get(map.map_name) ?? { played: 0, wins: 0, kills: 0, deaths: 0, rounds: 0, k1: 0, k2: 0, k3: 0, k4: 0, k5: 0 }
+        existing.played += 1
+        if (map.winner !== null && pTeam !== null && pTeam !== undefined && map.winner === pTeam) {
+          existing.wins += 1
+        }
+        existing.kills += Number(pRow.kills ?? 0)
+        existing.deaths += Number(pRow.deaths ?? 0)
+        existing.rounds += Number(pRow.roundsplayed ?? pRow.rounds_played ?? 0)
+        existing.k1 += Number(pRow.k1 ?? 0)
+        existing.k2 += Number(pRow.k2 ?? 0)
+        existing.k3 += Number(pRow.k3 ?? 0)
+        existing.k4 += Number(pRow.k4 ?? 0)
+        existing.k5 += Number(pRow.k5 ?? 0)
+        mapPerf.set(map.map_name, existing)
+      }
+
+      // Compute overall per-match rating from all player rows
+      const totalKills = playerRows.reduce((s, r) => s + Number(r.kills ?? 0), 0)
+      const totalDeaths = playerRows.reduce((s, r) => s + Number(r.deaths ?? 0), 0)
+      const totalRounds = playerRows.reduce((s, r) => s + Number(r.roundsplayed ?? r.rounds_played ?? 0), 0)
+      const tK1 = playerRows.reduce((s, r) => s + Number(r.k1 ?? 0), 0)
+      const tK2 = playerRows.reduce((s, r) => s + Number(r.k2 ?? 0), 0)
+      const tK3 = playerRows.reduce((s, r) => s + Number(r.k3 ?? 0), 0)
+      const tK4 = playerRows.reduce((s, r) => s + Number(r.k4 ?? 0), 0)
+      const tK5 = playerRows.reduce((s, r) => s + Number(r.k5 ?? 0), 0)
+      if (totalRounds > 0) {
+        const matchRating = computeRating(totalKills, totalRounds, totalDeaths, tK1, tK2, tK3, tK4, tK5)
+        ratingPoints.push({
+          matchId: match.id,
+          rating: matchRating,
+          date: match.start_time,
+        })
+      }
+    } catch {
+      // skip failed fetches
+    }
+  })
+  await Promise.allSettled(mapStatsPromises)
+
+  // Sort rating points oldest-first for the sparkline
+  ratingPoints.sort((a, b) => a.matchId - b.matchId)
+
+  const mapPerformances: MapPerformance[] = []
+  for (const [mapName, data] of mapPerf) {
+    const rating = data.rounds > 0
+      ? computeRating(data.kills, data.rounds, data.deaths, data.k1, data.k2, data.k3, data.k4, data.k5)
+      : 0
+    mapPerformances.push({
+      mapName,
+      played: data.played,
+      wins: data.wins,
+      kills: data.kills,
+      deaths: data.deaths,
+      rating,
+    })
+  }
+
   const kd = player.deaths > 0 ? (player.kills / player.deaths).toFixed(2) : "0.00"
   const winPct = player.total_maps > 0 ? ((player.wins / player.total_maps) * 100).toFixed(1) : "0.0"
   const losses = player.total_maps - player.wins
@@ -210,6 +304,12 @@ export default async function PlayerProfilePage({
                 )}
                 <span className="h-1 w-1 rounded-full bg-border" />
                 <span className="font-mono text-xs">{player.steamId}</span>
+                {recentForm.length > 0 && (
+                  <>
+                    <span className="h-1 w-1 rounded-full bg-border" />
+                    <RecentForm results={recentForm} size="md" />
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -278,6 +378,13 @@ export default async function PlayerProfilePage({
         </div>
       </section>
 
+      {/* Rating Trend */}
+      {ratingPoints.length >= 2 && (
+        <section className="mb-8 animate-fade-in-up stagger-1">
+          <RatingSparkline data={ratingPoints} />
+        </section>
+      )}
+
       {/* Achievements / Badges */}
       <section className="mb-8">
         <PlayerBadges player={player} rank={rank} competitionWins={competitionWins} />
@@ -303,6 +410,14 @@ export default async function PlayerProfilePage({
           </div>
         </section>
       </div>
+
+      {/* Map Performance */}
+      {mapPerformances.length > 0 && (
+        <section className="mt-8 animate-fade-in-up stagger-3">
+          <h2 className="mb-4 font-heading text-lg font-medium text-foreground">Map Performance</h2>
+          <PlayerMapStats maps={mapPerformances} />
+        </section>
+      )}
 
       {/* Win/Loss Record */}
       <section className="mt-8 animate-fade-in-up stagger-3">

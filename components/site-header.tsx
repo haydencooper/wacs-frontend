@@ -23,7 +23,23 @@ import { cn } from "@/lib/utils"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { PlayerSearch } from "@/components/player-search"
 
-const navItems = [
+/** Primary links shown inline on desktop (max 5 for space). */
+const primaryNavItems = [
+  { href: "/matches", label: "Matches", icon: Swords },
+  { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
+  { href: "/competitions", label: "Competitions", icon: Trophy },
+  { href: "/compare", label: "Compare", icon: GitCompare },
+  { href: "/stats", label: "Stats", icon: BarChart3 },
+]
+
+/** Overflow items shown only in the dropdown / mobile drawer. */
+const overflowNavItems = [
+  { href: "/", label: "Dashboard", icon: Crosshair },
+  { href: "/hall-of-fame", label: "Hall of Fame", icon: Crown },
+]
+
+/** All nav items combined (used in mobile drawer). */
+const allNavItemsBase = [
   { href: "/", label: "Dashboard", icon: Crosshair },
   { href: "/matches", label: "Matches", icon: Swords },
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
@@ -160,8 +176,54 @@ function MobileDrawer({
   )
 }
 
-/* -- Desktop Nav Dropdown ----------------------------------- */
-function NavMenu({ items }: { items: { href: string; label: string; icon: React.ComponentType<{ className?: string }> }[] }) {
+/* -- Desktop Inline Nav ------------------------------------- */
+function DesktopNav({ extraItems }: { extraItems: { href: string; label: string; icon: React.ComponentType<{ className?: string }> }[] }) {
+  const pathname = usePathname()
+
+  return (
+    <nav className="hidden items-center gap-1 lg:flex">
+      {primaryNavItems.map((item) => {
+        const isActive =
+          pathname === item.href ||
+          (item.href !== "/" && pathname.startsWith(item.href))
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={cn(
+              "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              isActive
+                ? "bg-secondary text-foreground"
+                : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+            )}
+          >
+            {item.label}
+          </Link>
+        )
+      })}
+      {extraItems.map((item) => {
+        const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href))
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={cn(
+              "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              isActive
+                ? "bg-secondary text-foreground"
+                : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+            )}
+          >
+            {item.label}
+          </Link>
+        )
+      })}
+    </nav>
+  )
+}
+
+/* -- Desktop Nav Dropdown (overflow for medium screens) ----- */
+function NavMenuOverflow({ items }: { items: { href: string; label: string; icon: React.ComponentType<{ className?: string }> }[] }) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -171,8 +233,10 @@ function NavMenu({ items }: { items: { href: string; label: string; icon: React.
   // close on route change
   useEffect(() => { setOpen(false) }, [pathname])
 
+  if (items.length === 0) return null
+
   return (
-    <div ref={ref} className="relative hidden md:block">
+    <div ref={ref} className="relative hidden lg:block">
       <button
         onClick={() => setOpen(!open)}
         className={cn(
@@ -181,9 +245,9 @@ function NavMenu({ items }: { items: { href: string; label: string; icon: React.
             ? "bg-secondary text-foreground"
             : "text-muted-foreground hover:bg-secondary hover:text-foreground"
         )}
-        aria-label="Navigation menu"
+        aria-label="More navigation"
       >
-        <Menu className="h-5 w-5" />
+        <Menu className="h-4 w-4" />
       </button>
 
       {open && (
@@ -328,10 +392,9 @@ export function SiteHeader() {
       .catch(() => setShowAdmin(false))
   }, [session])
 
-  const allNavItems = [
-    ...navItems,
-    ...(showAdmin ? [{ href: "/admin", label: "Admin", icon: Shield }] : []),
-  ]
+  const adminItem = showAdmin ? [{ href: "/admin", label: "Admin", icon: Shield }] : []
+  const mobileNavItems = [...allNavItemsBase, ...adminItem]
+  const overflowItems = [...overflowNavItems, ...adminItem]
 
   return (
     <>
@@ -347,21 +410,24 @@ export function SiteHeader() {
             </span>
           </Link>
 
-          {/* Right: Search + Theme + User + Nav */}
+          {/* Center: Inline desktop nav */}
+          <DesktopNav extraItems={adminItem} />
+
+          {/* Right: Search + Theme + User + Overflow */}
           <div className="flex items-center gap-2">
             <div className="hidden sm:block">
               <PlayerSearch />
             </div>
-            <div className="hidden md:block">
+            <div className="hidden lg:block">
               <ThemeToggle />
             </div>
             <UserMenu />
-            {/* Desktop dropdown nav */}
-            <NavMenu items={allNavItems} />
-            {/* Mobile hamburger */}
+            {/* Desktop overflow dropdown for secondary pages */}
+            <NavMenuOverflow items={overflowItems} />
+            {/* Mobile hamburger (shown on screens below lg) */}
             <button
               onClick={() => setDrawerOpen(true)}
-              className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground md:hidden"
+              className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground lg:hidden"
               aria-label="Open navigation"
             >
               <Menu className="h-5 w-5" />
@@ -371,7 +437,7 @@ export function SiteHeader() {
       </header>
 
       {/* Mobile drawer */}
-      <MobileDrawer items={allNavItems} open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+      <MobileDrawer items={mobileNavItems} open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </>
   )
 }
