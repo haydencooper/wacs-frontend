@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { fetchPlayerStats, fetchLeaderboard, fetchPlayerRecentMatches, fetchPlayerTeamInMatches, fetchSeasons, fetchMatches, fetchMatchPlayerStats, fetchMapStats, g5Fetch, unwrapArray, computeRating } from "@/lib/api"
 import { fetchSteamAvatar } from "@/lib/steam"
 import { deriveCompetitionWinner, getCompetitionStatus } from "@/lib/competitions"
@@ -26,6 +27,25 @@ import { Breadcrumbs } from "@/components/breadcrumbs"
 import { ShareButton } from "@/components/share-button"
 
 export const dynamic = "force-dynamic"
+
+export async function generateMetadata({ params }: { params: Promise<{ steamId: string }> }): Promise<Metadata> {
+  const { steamId } = await params
+  try {
+    const player = await fetchPlayerStats(steamId)
+    const name = player.name || `Player ${steamId}`
+    const kd = player.deaths > 0 ? (player.kills / player.deaths).toFixed(2) : "N/A"
+    return {
+      title: name,
+      description: `${name}'s WACS profile -- ${player.wins}W/${player.losses}L, ${kd} K/D across ${player.totalMatches ?? player.wins + player.losses} matches.`,
+      openGraph: {
+        title: `${name} - WACS Player Profile`,
+        description: `${player.wins} wins, ${player.losses} losses, ${kd} K/D ratio.`,
+      },
+    }
+  } catch {
+    return { title: "Player Profile" }
+  }
+}
 
 function StatBlock({
   label,

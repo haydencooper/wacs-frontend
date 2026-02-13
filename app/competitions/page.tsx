@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { fetchSeasons, fetchMatches } from "@/lib/api"
 import { deriveCompetitionWinner, getCompetitionStatus } from "@/lib/competitions"
 import { cn } from "@/lib/utils"
@@ -6,6 +7,11 @@ import Link from "next/link"
 import { Breadcrumbs } from "@/components/breadcrumbs"
 
 export const dynamic = "force-dynamic"
+
+export const metadata: Metadata = {
+  title: "Competitions",
+  description: "Browse WACS CS2 PUG competitions, seasons, and tournament brackets.",
+}
 
 function formatDate(iso: string): string {
   if (!iso) return "—"

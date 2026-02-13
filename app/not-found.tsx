@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Crosshair, ArrowLeft } from "lucide-react"
+import { Crosshair, ArrowLeft, Trophy, Swords, BarChart3 } from "lucide-react"
 
 export default function NotFound() {
   return (
@@ -26,6 +26,25 @@ export default function NotFound() {
           <ArrowLeft className="h-4 w-4" />
           Back to Dashboard
         </Link>
+
+        {/* Quick navigation */}
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+          <span className="text-xs text-muted-foreground">Or go to:</span>
+          {[
+            { href: "/matches", label: "Matches", icon: Swords },
+            { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
+            { href: "/stats", label: "Stats", icon: BarChart3 },
+          ].map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            >
+              <link.icon className="h-3 w-3" />
+              {link.label}
+            </Link>
+          ))}
+        </div>
       </div>
     </div>
   )

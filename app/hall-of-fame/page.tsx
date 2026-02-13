@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { fetchSeasons, fetchMatches, fetchMatchPlayerStats } from "@/lib/api"
 import { fetchSteamAvatars } from "@/lib/steam"
 import {
@@ -14,6 +15,11 @@ import { Breadcrumbs } from "@/components/breadcrumbs"
 import { SteamAvatar } from "@/components/steam-avatar"
 
 export const dynamic = "force-dynamic"
+
+export const metadata: Metadata = {
+  title: "Hall of Fame",
+  description: "WACS CS2 PUG community hall of fame -- competition winners and season MVPs.",
+}
 
 function formatDate(iso: string): string {
   if (!iso) return "—"

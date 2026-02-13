@@ -1,8 +1,14 @@
+import type { Metadata } from "next"
 import { fetchMatches } from "@/lib/api"
 import { MatchesView } from "@/components/matches-view"
 import { Breadcrumbs } from "@/components/breadcrumbs"
 
 export const dynamic = "force-dynamic"
+
+export const metadata: Metadata = {
+  title: "Match History",
+  description: "Browse all WACS CS2 PUG matches, results, and scoreboards.",
+}
 
 export default async function MatchesPage() {
   const matches = await fetchMatches()

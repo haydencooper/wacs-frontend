@@ -27,9 +27,29 @@ const spaceGrotesk = Space_Grotesk({
 })
 
 export const metadata: Metadata = {
-  title: "WACS - CS2 PUG System",
+  title: {
+    default: "WACS - CS2 PUG System",
+    template: "%s | WACS",
+  },
   description:
     "Player leaderboards, match history, and stats for the WACS competitive Counter-Strike PUG community.",
+  openGraph: {
+    title: "WACS - CS2 PUG System",
+    description:
+      "Player leaderboards, match history, and stats for the WACS competitive Counter-Strike PUG community.",
+    siteName: "WACS",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "WACS - CS2 PUG System",
+    description:
+      "Player leaderboards, match history, and stats for the WACS competitive Counter-Strike PUG community.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 }
 
 export const viewport: Viewport = {

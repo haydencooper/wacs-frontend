@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import { fetchMatch, fetchMapStats, fetchMatchPlayerStats } from "@/lib/api"
 import { fetchSteamAvatars } from "@/lib/steam"
 import { cn } from "@/lib/utils"
@@ -12,6 +13,26 @@ import { LiveMatchRefresh } from "@/components/live-match-refresh"
 import { getMapDisplayName, getMapMeta } from "@/lib/maps"
 
 export const dynamic = "force-dynamic"
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params
+  try {
+    const match = await fetchMatch(id)
+    const team1 = match.team1_name || "Team 1"
+    const team2 = match.team2_name || "Team 2"
+    const score = match.team1_score != null ? `${match.team1_score}-${match.team2_score}` : "Live"
+    return {
+      title: `Match #${id} - ${team1} vs ${team2}`,
+      description: `${team1} vs ${team2} (${score}) - WACS CS2 PUG match details and scoreboard.`,
+      openGraph: {
+        title: `${team1} vs ${team2} - Match #${id}`,
+        description: `Score: ${score}. View full scoreboard and player stats.`,
+      },
+    }
+  } catch {
+    return { title: `Match #${id}` }
+  }
+}
 
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", {

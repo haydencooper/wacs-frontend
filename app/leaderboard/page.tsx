@@ -1,9 +1,15 @@
+import type { Metadata } from "next"
 import { fetchLeaderboard, fetchSeasons, fetchMatches } from "@/lib/api"
 import { fetchSteamAvatars } from "@/lib/steam"
 import { LeaderboardView } from "@/components/leaderboard-view"
 import { Breadcrumbs } from "@/components/breadcrumbs"
 
 export const dynamic = "force-dynamic"
+
+export const metadata: Metadata = {
+  title: "Leaderboard",
+  description: "WACS CS2 PUG community leaderboard -- rankings, ratings, and player stats.",
+}
 
 export default async function LeaderboardPage() {
   const [players, seasons, matches] = await Promise.all([
