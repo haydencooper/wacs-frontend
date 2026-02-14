@@ -407,14 +407,21 @@ export async function fetchMatchPlayerStats(
   // The raw data contains per-map rows. We need to aggregate per player
   // and split by team. Each row has team_id which corresponds to
   // match.team1_id or match.team2_id.
-  const team1Id = match?.team1_id ?? 0
-  const team2Id = match?.team2_id ?? 0
+  const team1Id = match?.team1_id ?? null
+  const team2Id = match?.team2_id ?? null
+
+  // Debug: log the raw API response to understand the data shape
+  if (raw.length > 0) {
+    console.log("[v0] fetchMatchPlayerStats match", matchId, "team1_id=", team1Id, "team2_id=", team2Id)
+    console.log("[v0] fetchMatchPlayerStats first row keys:", Object.keys(raw[0]))
+    console.log("[v0] fetchMatchPlayerStats first 3 rows (team_id):", raw.slice(0, 3).map(r => ({ steam_id: r.steam_id, team_id: r.team_id, name: r.name })))
+  }
 
   // Aggregate stats by steam_id
-  const playerMap = new Map<string, { raw: Record<string, unknown>[], teamId: number }>()
+  const playerMap = new Map<string, { raw: Record<string, unknown>[], teamId: number | null }>()
   for (const row of raw) {
     const steamId = String(row.steam_id ?? row.steamId ?? "")
-    const teamId = Number(row.team_id ?? 0)
+    const teamId = row.team_id != null ? Number(row.team_id) : null
     if (!steamId) continue
     const existing = playerMap.get(steamId)
     if (existing) {
@@ -426,6 +433,23 @@ export async function fetchMatchPlayerStats(
 
   const team1: PlayerStat[] = []
   const team2: PlayerStat[] = []
+
+  // Determine if team_id based splitting is possible.
+  // If both match team IDs are 0 or the same value, team_id is useless for splitting.
+  const canSplitByTeamId = team1Id != null && team2Id != null && team1Id !== team2Id
+
+  // Collect all distinct team_ids from the player data to use as a fallback
+  const distinctTeamIds = new Set<number>()
+  for (const [, { teamId }] of playerMap) {
+    if (teamId != null) distinctTeamIds.add(teamId)
+  }
+  const sortedDistinctIds = [...distinctTeamIds].sort((a, b) => a - b)
+  // If there are exactly 2 distinct team_ids in the player data, we can use those
+  // even when the match object has both as 0
+  const fallbackTeam1Id = sortedDistinctIds.length === 2 ? sortedDistinctIds[0] : null
+  const fallbackTeam2Id = sortedDistinctIds.length === 2 ? sortedDistinctIds[1] : null
+
+  console.log("[v0] canSplitByTeamId=", canSplitByTeamId, "distinctTeamIds=", sortedDistinctIds, "fallbackTeam1Id=", fallbackTeam1Id, "fallbackTeam2Id=", fallbackTeam2Id)
 
   for (const [steamId, { raw: rows, teamId }] of playerMap) {
     // Sum numeric fields across maps (for BO1 there's only 1 row per player)
@@ -459,19 +483,29 @@ export async function fetchMatchPlayerStats(
     const player = normalizePlayer(aggregated)
 
     // Assign to team based on team_id matching the match's team IDs.
-    // team IDs can legitimately be 0, so we compare with != null
-    // instead of truthiness checks.
-    if (team1Id != null && teamId === team1Id) {
-      team1.push(player)
-    } else if (team2Id != null && teamId === team2Id) {
-      team2.push(player)
-    } else {
-      // Fallback: round-robin when we truly can't determine the team
-      if (team1.length <= team2.length) {
+    if (canSplitByTeamId && teamId != null) {
+      // Match has distinct team1_id / team2_id -- use direct comparison
+      if (teamId === team1Id) {
+        team1.push(player)
+      } else if (teamId === team2Id) {
+        team2.push(player)
+      } else {
+        // Unknown team_id -- round-robin fallback
+        if (team1.length <= team2.length) team1.push(player)
+        else team2.push(player)
+      }
+    } else if (fallbackTeam1Id != null && fallbackTeam2Id != null && teamId != null) {
+      // Match team IDs are both 0 / same, but the raw player data has 2
+      // distinct team_id values we can use for splitting
+      if (teamId === fallbackTeam1Id) {
         team1.push(player)
       } else {
         team2.push(player)
       }
+    } else {
+      // Truly no team info -- round-robin
+      if (team1.length <= team2.length) team1.push(player)
+      else team2.push(player)
     }
   }
 
