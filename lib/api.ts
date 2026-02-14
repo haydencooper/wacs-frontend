@@ -458,15 +458,15 @@ export async function fetchMatchPlayerStats(
 
     const player = normalizePlayer(aggregated)
 
-    // Assign to team based on team_id matching the match's team IDs
-    if (team1Id && teamId === team1Id) {
+    // Assign to team based on team_id matching the match's team IDs.
+    // team IDs can legitimately be 0, so we compare with != null
+    // instead of truthiness checks.
+    if (team1Id != null && teamId === team1Id) {
       team1.push(player)
-    } else if (team2Id && teamId === team2Id) {
+    } else if (team2Id != null && teamId === team2Id) {
       team2.push(player)
     } else {
-      console.warn(
-        `[fetchMatchPlayerStats] Could not match team_id ${teamId} to team1=${team1Id} or team2=${team2Id} for player ${steamId} in match ${matchId}. Using round-robin fallback.`
-      )
+      // Fallback: round-robin when we truly can't determine the team
       if (team1.length <= team2.length) {
         team1.push(player)
       } else {
